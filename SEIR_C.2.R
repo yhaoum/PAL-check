@@ -1,4 +1,4 @@
-#Full Model version 1.0
+#This model can generate the plot in C.2
 
 #simulate
 library(pomp)
