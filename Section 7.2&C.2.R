@@ -3,7 +3,7 @@
 rproc <- Csnippet("
     double rate[3], trans[7];
     double N = S+E+I+R;         // population size
-    double xi = rgammawn(1,dt); // Is this mean 1 gamma noise??
+    double xi = rgamma(1,1); // Is this mean 1 gamma??
     // True death is not by expon rate, but binomial probability.
     rate[0] = -xi*beeta*I/N;    // stochastic force of infection
     rate[1] = -rho;         // rho is our original sigma
