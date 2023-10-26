@@ -1,0 +1,591 @@
+---
+title: "Rotavirus Model"
+author: "Yize Hao"
+date: "2023-10-19"
+output: html_document
+---
+
+```{r}
+library(pomp)
+library(doFuture)
+```
+#### Full Momdel
+
+```{r}
+rproc <- Csnippet("
+    double gamma = 1.0;
+    double d_1=1/(5.0*52.0);           // d1 = 0.003846154
+    double d_2=1/(55.0*52.0);          // d2 = 0.0003496503
+    double N = 82372825.0;
+    double alpha = 1/(78.86912*52.0);  // alpha = 0.0002438314
+    double delta = 1/(18.86912*52.0);  // delta = 0.001019166
+    double omega = 1/(1*52.0);         // omega = 0.01923077
+    
+    double I = I_1 + I_2 + I_3;
+    double trans_S1[3], trans_S2[3], trans_S3[2], trans_I1[3], trans_I2[3], trans_I3[2], trans_R1[3], trans_R2[3], trans_R3[2];
+    
+    double prob_S1[3],prob_I1[3],prob_R1[3],prob_S2[3],prob_I2[3],prob_R2[3],prob_S3[2],prob_I3[2],prob_R3[2];
+    
+    double kappa = (1 + rho*cos(2*3.141593*t/52 + phi));
+    double Beta_1 = beta1*kappa; //seasonal forcing
+    double Beta_2 = beta2*kappa; //seasonal forcing
+    double Beta_3 = beta3*kappa; //seasonal forcing
+    
+    // Define rate
+    prob_S1[0] = 1-exp(-Beta_1*I/N*dt);
+    prob_S1[1] = 1-exp(-dt*d_1);
+    prob_S1[2] = exp(-dt*d_1) - prob_S1[0];
+    
+    prob_I1[0] = 1-exp(-dt*gamma);
+    prob_I1[1] = 1-exp(-dt*d_1);
+    prob_I1[2] = exp(-dt*gamma)+exp(-dt*d_1) - 1;
+    
+    prob_R1[0] = 1 - exp(-dt*omega);  // E_1,t this goes back to S_1,(t+1)
+    prob_R1[1] = 1 - exp(-dt*d_1);
+    prob_R1[2] = exp(-dt*omega) + exp(-dt*d_1) - 1;
+    
+    prob_S2[0] = 1-exp(-Beta_2*I/N*dt);
+    prob_S2[1] = 1-exp(-dt*d_2);
+    prob_S2[2] = exp(-dt*d_2) - prob_S2[0];
+    
+    prob_I2[0] = 1-exp(-dt*gamma);
+    prob_I2[1] = 1-exp(-dt*d_2);
+    prob_I2[2] = exp(-dt*gamma)+exp(-dt*d_2) - 1;
+    
+    prob_R2[0] = 1 - exp(-dt*omega);  // E_1,t this goes back to S_1,(t+1)
+    prob_R2[1] = 1 - exp(-dt*d_1);
+    prob_R2[2] = exp(-dt*omega) + exp(-dt*d_1) - 1;
+    
+    // For Age Group (3): Die first before transition;
+    
+    double S3mD = rbinom(S_3, delta);
+    double I3mD = rbinom(I_3, delta);
+    double R3mD = rbinom(R_3, delta);
+    
+    prob_S3[0] = 1-exp(-Beta_3*I/N*dt);
+    prob_S3[1] = 1 - prob_S3[0];
+    
+    prob_I3[0] = 1 - exp(-dt*gamma);
+    prob_I3[1] = exp(-dt*gamma);
+    
+    prob_R3[0] = 1 - exp(-dt*omega);
+    prob_R3[1] = exp(-dt*omega);
+    
+    // Transition
+    // B: S->I
+    // C: I->R
+    // F: Aging: (1)->(2)->(3)
+    // E: R->S
+    // D: Death
+    //// Note: Here S_1, S_2... are all old value from (t-1)
+    rmultinom(S_1, &prob_S1, 3, &trans_S1); // B, F, S-B-F
+    rmultinom(I_1, &prob_I1, 3, &trans_I1); // C, F, I-C-F
+    rmultinom(R_1, &prob_R1, 3, &trans_R1); // E, F, R-E-F
+    
+    rmultinom(S_2, &prob_S2, 3, &trans_S2); // B, F, S-B-F
+    rmultinom(I_2, &prob_I2, 3, &trans_I2); // C, F, I-C-F
+    rmultinom(R_2, &prob_R2, 3, &trans_R2); // E, F, R-E-F
+    
+    rmultinom(S3mD, &prob_S3, 2, &trans_S3); // B, S-D-B
+    rmultinom(I3mD, &prob_I3, 2, &trans_I3); // C, I-D-C
+    rmultinom(R3mD, &prob_R3, 2, &trans_R3); // E, R-D-E
+    
+    S_1 = trans_S1[2] + trans_R1[0] + rpois(alpha*N*dt); // Include Birth
+    I_1 = trans_I1[2] + trans_S1[0];
+    R_1 = trans_R1[2] + trans_I1[0];
+    
+    S_2 = trans_S2[2] + trans_R2[0] + trans_S1[1]; // Include Aging
+    I_2 = trans_I2[2] + trans_S2[0] + trans_I1[1];
+    R_2 = trans_R2[2] + trans_I2[0] + trans_R1[1];
+    
+    S_3 = trans_S3[1] + trans_R3[0] + trans_S2[1]; // Include Aging
+    I_3 = trans_I3[1] + trans_S3[0] + trans_I2[1];
+    R_3 = trans_R3[1] + trans_I3[0] + trans_R2[1];
+    
+    //Accumvar
+    H_1 += trans_S1[0];
+    H_2 += trans_S2[0];
+    H_3 += trans_S3[0];
+    
+    
+")
+
+## ----rinit-------------------------------------------------
+rinit <- Csnippet("
+  double y1 = 454.0;
+  double y2 = 66.0;
+  double y3 = 41.0;
+  double N = 82372825.0;
+  double gamma = 1.0;
+  double d_1=1/(5*52.0);
+  double d_2=1/(55*52.0);
+  double alpha = 1/(78.86912*52.0);
+  double delta = 1/(18.86912*52.0);
+  double omega = 1/(1*52.0);
+  
+  I_1 = nearbyint(y1/(gamma+d_1));
+  I_2 = nearbyint((y2+d_1*I_1)/((d_2+gamma)));
+  I_3 = (y3+d_2*I_2)/((delta+gamma));
+  S_1 = nearbyint((alpha*N-(gamma+d_1)*I_1+omega*(N*alpha/d_1-I_1))/(d_1+omega));
+  S_2 = nearbyint((d_1*S_1-(d_2+gamma)*I_2+d_1*I_1+omega*(N*alpha/d_2-I_2))/(d_2+omega));
+  S_3 = nearbyint((d_2*S_2-(gamma+delta)*I_3+d_2*I_2+omega*(N*alpha/delta-I_3))/(omega+delta));
+  R_1 = nearbyint((N*alpha/d_1-S_1-I_1));
+  R_2 = nearbyint((N*alpha/d_2-S_2-I_2));
+  R_3 = nearbyint((N*alpha/delta-S_3-I_3));
+")
+
+
+## ----rmeasure-------------------------------------------------
+rmeas <- Csnippet("
+  cases1 = rbinom(H_1, 1); // this is observed cases
+  cases2 = rbinom(H_2, 1);
+  cases3 = rbinom(H_3, 1);
+")
+
+dmeas <- Csnippet("
+  lik = dbinom(cases1, H_1, 0.3, 1) + dbinom(cases2, H_2, 0.3, 1) + dbinom(cases3, H_3, 0.3, 1);
+")
+```
+
+```{r}
+sim1 <- simulate(t0=0, 
+                 times = 1:416, 
+                 paramnames = c("beta1","beta2","beta3","phi","rho"),
+                 params = c(beta1 = 12.15, beta2 = 0.22, beta3 = 0.34, 
+                            phi = 0.017, rho = 0.022),
+                 rinit = rinit,
+                 rprocess = discrete_time(rproc, delta.t=1/4),
+                 rmeasure = rmeas,
+                 accumvars=c("H_1","H_2","H_3"),
+                 statenames=c("S_1","I_1","R_1",
+                              "S_2","I_2","R_2",
+                              "S_3","I_3","R_3"),
+                 obsnames=c("cases1","cases2","cases3"))
+
+(sim_data <- as.data.frame(sim1))
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=S_1),color='green') +
+ geom_line(aes(x=time, y=I_1), color='red') +
+ geom_line(aes(x=time, y=R_1), color='blue') +
+  ylab('X')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=cases1), color='red') +
+  ylab('Y_I')+xlab('date')
+```
+
+#### Test Here
+
+```{r}
+rproc <- Csnippet("
+    // double N = S_1+E_1+I_1+R_1+S_2+E_2+I_2+R_2+S_3+E_3+I_3+R_3;
+    
+    double gamma = 1.0;
+    double d_1=1/(5.0*52.0);
+    double d_2=1/(55.0*52.0);
+    double N = 82372825.0;
+    double alpha = dt*N/(78.86912*52.0);
+    double delta = 1 - 1/(18.86912*52.0);
+    double omega = 1/(1.0*52.0);
+    
+    double I = I_1 + I_2 + I_3;
+    double trans_S1[3], trans_S2[3], trans_S3[2], trans_I1[3], trans_I2[3], trans_I3[2], trans_R1[3], trans_R2[3], trans_R3[2];
+    
+    double prob_S1[3],prob_I1[3],prob_R1[3],prob_S2[3],prob_I2[3],prob_R2[3],prob_S3[2],prob_I3[2],prob_R3[2];
+    
+    double kappa = (1 + rho*cos(2*3.141593*t/52 + phi));
+    double Beta_1 = beta1*kappa; //seasonal forcing
+    double Beta_2 = beta2*kappa; //seasonal forcing
+    double Beta_3 = beta3*kappa; //seasonal forcing
+    
+    // Define rate
+    prob_S1[0] = 1-exp(-Beta_1*I/N*dt);
+    prob_S1[1] = 1-exp(-dt*d_1);
+    prob_S1[2] = exp(-dt*d_1) - prob_S1[0];
+    
+    prob_I1[0] = 1-exp(-dt*gamma);
+    prob_I1[1] = 1-exp(-dt*d_1);
+    prob_I1[2] = exp(-dt*gamma)+exp(-dt*d_1) - 1;
+    
+    prob_R1[0] = 1 - exp(-dt*omega);  // E_1,t this goes back to S_1,(t+1)
+    prob_R1[1] = 1 - exp(-dt*d_1);
+    prob_R1[2] = exp(-dt*omega) + exp(-dt*d_1) - 1;
+    
+    prob_S2[0] = 1-exp(-Beta_2*I/N*dt);
+    prob_S2[1] = 1-exp(-dt*d_2);
+    prob_S2[2] = exp(-dt*d_2) - prob_S2[0];
+    
+    prob_I2[0] = 1-exp(-dt*gamma);
+    prob_I2[1] = 1-exp(-dt*d_2);
+    prob_I2[2] = exp(-dt*gamma)+exp(-dt*d_2) - 1;
+    
+    prob_R2[0] = 1 - exp(-dt*omega);  // E_1,t this goes back to S_1,(t+1)
+    prob_R2[1] = 1 - exp(-dt*d_1);
+    prob_R2[2] = exp(-dt*omega) + exp(-dt*d_1) - 1;
+    
+    // For Age Group (3): Die first before transition;
+    
+    double S3mD = rbinom(S_3, delta);
+    double I3mD = rbinom(I_3, delta);
+    double R3mD = rbinom(R_3, delta);
+    
+    prob_S3[0] = 1-exp(-Beta_3*I/N*dt);
+    prob_S3[1] = 1 - prob_S3[0];
+    
+    prob_I3[0] = 1 - exp(-dt*gamma);
+    prob_I3[1] = exp(-dt*gamma);
+    
+    prob_R3[0] = 1 - exp(-dt*omega);
+    prob_R3[1] = exp(-dt*omega);
+    
+    // Transition
+    // B: S->I
+    // C: I->R
+    // F: Aging: (1)->(2)->(3)
+    // E: R->S
+    // D: Death
+    //// Note: Here S_1, S_2... are all old value from (t-1)
+    rmultinom(S_1, &prob_S1, 3, &trans_S1); // B, F, S-B-F
+    rmultinom(I_1, &prob_I1, 3, &trans_I1); // C, F, I-C-F
+    rmultinom(R_1, &prob_R1, 3, &trans_R1); // E, F, R-E-F
+    
+    rmultinom(S_2, &prob_S2, 3, &trans_S2); // B, F, S-B-F
+    rmultinom(I_2, &prob_I2, 3, &trans_I2); // C, F, I-C-F
+    rmultinom(R_2, &prob_R2, 3, &trans_R2); // E, F, R-E-F
+    
+    rmultinom(S3mD, &prob_S3, 2, &trans_S3); // B, S-D-B
+    rmultinom(I3mD, &prob_I3, 2, &trans_I3); // C, I-D-C
+    rmultinom(R3mD, &prob_R3, 2, &trans_R3); // E, R-D-E
+    
+    S_1 = trans_S1[2] + trans_R1[0] + rpois(alpha*N*dt); // Include Birth
+    I_1 = trans_I1[2] + trans_S1[0];
+    R_1 = trans_R1[2] + trans_I1[0];
+    
+    S_2 = trans_S2[2] + trans_R2[0] + trans_S1[1]; // Include Aging
+    I_2 = trans_I2[2] + trans_S2[0] + trans_I1[1];
+    R_2 = trans_R2[2] + trans_I2[0] + trans_R1[1];
+    // No transmit here
+    S_3 = trans_S3[1] + trans_R3[0] + trans_S2[1]; // Include Aging
+    I_3 = trans_I3[1] + trans_S3[0] + trans_I2[1];
+    R_3 = trans_R3[1] + trans_I3[0] + trans_R2[1];
+    
+    //Accumvar
+    H_1 += trans_S1[0];
+    H_2 += trans_S2[0];
+    H_3 += trans_S3[0];
+    
+    
+")
+
+## ----rinit-------------------------------------------------
+rinit <- Csnippet("
+  double y1 = 454.0;
+  double y2 = 66.0;
+  double y3 = 41.0;
+  double N = 82372825.0;
+  double gamma = 1.0;
+  double d_1=1/(5.0*52.0);
+  double d_2=1/(55.0*52);
+  double alpha = 1/(78.86912*52.0);
+  double delta = 1/(18.86912*52.0);
+  double omega = 1/(1*52.0);
+  
+  I_1 = nearbyint(y1/(gamma+d_1));
+  I_2 = nearbyint((y2+d_1*I_1)/((d_2+gamma)));
+  I_3 = nearbyint((y3+d_2*I_2)/((delta+gamma)));
+  S_1 = nearbyint((alpha*N-(gamma+d_1)*I_1+omega*(N*alpha/d_1-I_1))/(d_1+omega));
+  S_2 = nearbyint((d_1*S_1-(d_2+gamma)*I_2+d_1*I_1+omega*(N*alpha/d_2-I_2))/(d_2+omega));
+  S_3 = nearbyint((d_2*S_2-(gamma+delta)*I_3+d_2*I_2+omega*(N*alpha/delta-I_3))/(omega+delta));
+  R_1 = nearbyint((N*alpha/d_1-S_1-I_1));
+  R_2 = nearbyint((N*alpha/d_2-S_2-I_2));
+  R_3 = nearbyint((N*alpha/delta-S_3-I_3));
+")
+
+
+## ----rmeasure-------------------------------------------------
+rmeas <- Csnippet("
+  cases1 = rbinom(H_1, 1); // this is observed cases
+  cases2 = rbinom(H_2, 1);
+  cases3 = rbinom(H_3, 1);
+")
+
+dmeas <- Csnippet("
+  lik = dbinom(cases1, H_1, 0.3, 1) + dbinom(cases2, H_2, 0.3, 1) + dbinom(cases3, H_3, 0.3, 1);
+")
+```
+
+
+```{r}
+rproc <- Csnippet("
+    // double N = S_1+E_1+I_1+R_1+S_2+E_2+I_2+R_2+S_3+E_3+I_3+R_3;
+    
+    double gamma = 1.0;
+    double d_1=1/(5.0*52.0);  // 0.003846154
+    double N = S_1+I_1+R_1;
+    double alpha = 1/(78.86912*52.0);  // 0.0002438314
+    // double delta = 1 - 1/(18.86912*52.0);  // 0.9989808
+    double omega = 1/(1.0*52.0);  // 0.01923077
+    
+    double I = I_1;
+    double trans_S1[3], trans_I1[3], trans_R1[3];
+    double prob_S1[3],prob_I1[3],prob_R1[3];
+    
+    double kappa = (1 + rho*cos(2*3.141593*t/52 + phi));
+    double Beta_1 = beta1*kappa; //seasonal forcing
+    
+    // Define rate
+    prob_S1[0] = 1-exp(-Beta_1*I/N*dt); // S->I
+    prob_S1[1] = 1-exp(-dt*d_1); // F
+    prob_S1[2] = exp(-dt*d_1) - prob_S1[0];
+    
+    prob_I1[0] = 1-exp(-dt*gamma); // I->R
+    prob_I1[1] = 1-exp(-dt*d_1);
+    prob_I1[2] = exp(-dt*gamma)+exp(-dt*d_1) - 1;
+    
+    prob_R1[0] = 1 - exp(-dt*omega);  // E_1,t this goes back to S_1,(t+1)
+    prob_R1[1] = 1 - exp(-dt*d_1);
+    prob_R1[2] = exp(-dt*omega) + exp(-dt*d_1) - 1;
+    
+    // Transition
+    // B: S->I
+    // C: I->R
+    // F: Aging: (1)->(2)->(3)
+    // E: R->S
+    // D: Death
+    //// Note: Here S_1, S_2... are all old value from (t-1)
+   rmultinom(S_1, &prob_S1, 3, &trans_S1); // B, F, S-B-F
+   rmultinom(I_1, &prob_I1, 3, &trans_I1); // C, F, I-C-F
+   rmultinom(R_1, &prob_R1, 3, &trans_R1); // E, F, R-E-F
+    
+    S_1 = trans_S1[2] + trans_R1[0] + rpois(alpha*N*dt); // Include Birth
+    I_1 = trans_I1[2] + trans_S1[0];
+    R_1 = trans_R1[2] + trans_I1[0];
+    
+")
+
+## ----rinit-------------------------------------------------
+rinit <- Csnippet("
+    double y1 = 454.0;
+    double gamma = 1.0;
+    double d_1=1/(5.0*52.0);
+    double N = 82372825.0;
+    double alpha = 0.25/(78.86912*52.0);
+    double omega = 1/(1.0*52.0);
+  
+  I_1 = nearbyint(y1/(gamma+d_1));
+  S_1 = nearbyint((alpha*N-(gamma+d_1)*I_1+omega*(N*alpha/d_1-I_1))/(d_1+omega));
+  R_1 = nearbyint((N*alpha/d_1-S_1-I_1));
+  
+")
+
+
+## ----rmeasure-------------------------------------------------
+rmeas <- Csnippet("
+  cases1 = rbinom(S_1, 1); // this is observed cases
+")
+
+dmeas <- Csnippet("
+  lik = dbinom(cases1, H_1, 0.3, 1);
+")
+```
+
+```{r}
+rproc <- Csnippet("
+    // double N = S_1+E_1+I_1+R_1+S_2+E_2+I_2+R_2+S_3+E_3+I_3+R_3;
+    
+    double gamma = 1.0;
+    double d_1=1/(5.0*52.0);
+    N = S_1+I_1+R_1;
+    double alpha = 1/(78.86912*52.0);
+    // double delta = 1 - 1/(18.86912*52.0);
+    double omega = 1/(1.0*52.0);
+    
+    double I = I_1;
+    double trans_S1[3], trans_I1[3], trans_R1[3];
+    
+    double prob_S1[3],prob_I1[3],prob_R1[3];
+    
+    kappa = (1 + rho*cos(2*3.141593*t/52 + phi));
+    Beta_1 = beta1*kappa; //seasonal forcing
+    
+    // Define rate
+    prob_S1[0] = 1-exp(-Beta_1*I/N); // S->I
+    prob_S1[1] = 1-exp(-d_1); // F
+    prob_S1[2] = exp(-d_1) - prob_S1[0];
+    
+    prob_I1[0] = 1-exp(-gamma); // I->R
+    prob_I1[1] = 1-exp(-d_1);
+    prob_I1[2] = exp(-gamma)+exp(-d_1) - 1;
+    
+    prob_R1[0] = 1 - exp(-omega);  // E_1,t this goes back to S_1,(t+1)
+    prob_R1[1] = 1 - exp(-d_1);
+    prob_R1[2] = exp(-omega) + exp(-d_1) - 1;
+    
+    /////////////////Copy Here: Debug/////////
+    prob_S10 = 1-exp(-Beta_1*I/N*dt); // S->I
+    prob_S11 = 1-exp(-d_1*dt); // F
+    prob_S12 = exp(-d_1*dt) - prob_S10;
+    
+    prob_I10 = 1-exp(-gamma*dt); // I->R
+    prob_I11 = 1-exp(-d_1*dt);
+    prob_I12 = exp(-gamma*dt)+exp(-d_1*dt) - 1;
+    
+    prob_R10 = 1 - exp(-omega*dt);  // E_1,t this goes back to S_1,(t+1)
+    prob_R11 = 1 - exp(-d_1*dt);
+    prob_R12 = exp(-omega*dt) + exp(-d_1*dt) - 1;
+    
+    // Transition
+    // B: S->I
+    // C: I->R
+    // F: Aging: (1)->(2)->(3)
+    // E: R->S
+    // D: Death
+    //// Note: Here S_1, S_2... are all old value from (t-1)
+   rmultinom(S_1, &prob_S1, 3, &trans_S1); // B, F, S-B-F
+   rmultinom(I_1, &prob_I1, 3, &trans_I1); // C, F, I-C-F
+   rmultinom(R_1, &prob_R1, 3, &trans_R1); // E, F, R-E-F
+    
+    S_1 = trans_S1[2] + trans_R1[0] + rpois(alpha*N*dt); // Include Birth
+    I_1 = trans_I1[2] + trans_S1[0];
+    R_1 = trans_R1[2] + trans_I1[0];
+    
+")
+
+## ----rinit-------------------------------------------------
+rinit <- Csnippet("
+  
+  I_1 = 452;
+  S_1 = 1285492;
+  R_1 = 19586;
+  
+  N = I_1+S_1+R_1;
+  
+")
+
+
+## ----rmeasure-------------------------------------------------
+rmeas <- Csnippet("
+  cases1 = rbinom(S_1, 0.5); // this is observed cases
+")
+
+dmeas <- Csnippet("
+  lik = dbinom(cases1, H_1, 0.3, 1);
+")
+```
+
+
+```{r}
+sim1 <- simulate(t0=0, 
+                 times = 1:416, 
+                 paramnames = c("beta1","beta2","beta3","phi","rho"),
+                 params = c(beta1 = 12.15, beta2 = 0.22, beta3 = 0.34, 
+                            phi = 0.017, rho = 0.022),
+                 rinit = rinit,
+                 rprocess = discrete_time(rproc, delta.t=0.25),
+                 rmeasure = rmeas,
+                 statenames=c("S_1","I_1","R_1","prob_S10","prob_S11","prob_S12","prob_I10","prob_I11","prob_I12","prob_R10","prob_R11","prob_R12","N","kappa","Beta_1"),
+                 obsnames=c("cases1"))
+
+(sim_data <- as.data.frame(sim1))
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=S_1),color='green') +
+ geom_line(aes(x=time, y=I_1), color='red') +
+ geom_line(aes(x=time, y=R_1), color='blue') +
+  ylab('X')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=prob_S10),color='green') +
+ geom_line(aes(x=time, y=prob_S11), color='red') +
+ geom_line(aes(x=time, y=prob_S12), color='blue') +
+  ylab('prob_S1')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=N), color='red') +
+  ylab('N')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=kappa), color='red') +
+  ylab('kappa')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=Beta_1), color='red') +
+  ylab('Beta_1')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=cases1), color='red') +
+  ylab('Y_I')+xlab('date')
+```
+
+```{r}
+y1 = 454.0;
+gamma = 1.0;
+d_1=1/(5.0*52.0);
+N = 82372825.0;
+alpha = 0.25/(78.86912*52.0);
+omega = 1/(1.0*52.0);
+  I_1 = round(y1/(gamma+d_1));
+  S_1 = round((alpha*N-(gamma+d_1)*I_1+omega*(N*alpha/d_1-I_1))/(d_1+omega));
+  R_1 = round((N*alpha/d_1-S_1-I_1));
+N = S_1+I_1+R_1
+```
+
+```{r}
+sim1 <- simulate(t0=0, 
+                 times = 1:416, 
+                 paramnames = c("beta1","beta2","beta3","phi","rho"),
+                 params = c(beta1 = 12.15, beta2 = 0.22, beta3 = 0.34, 
+                            phi = 0.017, rho = 0.022),
+                 rinit = rinit,
+                 rprocess = discrete_time(rproc, delta.t=1/4),
+                 rmeasure = rmeas,
+                 accumvars=c("H_1","H_2","H_3"),
+                 statenames=c("S_1","I_1","R_1",
+                              "S_2","I_2","R_2",
+                              "S_3","I_3","R_3"),
+                 obsnames=c("cases1","cases2","cases3"))
+
+(sim_data <- as.data.frame(sim1))
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=S_1),color='green') +
+ geom_line(aes(x=time, y=I_1), color='red') +
+ geom_line(aes(x=time, y=R_1), color='blue') +
+  ylab('X')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=cases1), color='red') +
+  ylab('Y_I')+xlab('date')
+```
+
+#### Pfilter
+
+```{r}
+dat <- data.frame(realdat, time = c(1:(52*8)))
+
+dat |>
+  pomp(t0=0,
+    time="time",
+    rprocess=discrete_time(rproc,delta.t=1/4), ## Obs time every week, but delta.t transition is actually everyday
+    rinit=rinit,
+    dmeasure=dmeas,
+    rmeasure=rmeas,
+    accumvars=c("H_1","H_2","H_3"),
+    statenames=c("S_1","S_2","S_3","I_1","I_2","I_3","R_1","R_2","R_3","H_1","H_2","H_3"),
+    paramnames=c("beta1","beta2","beta3","phi","rho")
+  ) -> m1
+
+theta <- c(beta1 = 12.15, beta2 = 0.22, beta3 = 0.34, phi = 0.017, rho = 0.022)
+
+plan(multicore)
+foreach(i=1:4, .combine=c,
+  .options.future=list(seed=998468235L)
+) %dopar% {
+  pfilter(m1,Np=10000,params=theta)
+} -> pfs
+
+logmeanexp(logLik(pfs),se=TRUE)
+```
+
+#### Stocks 2017 Initializer

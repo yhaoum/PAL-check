@@ -1,0 +1,26 @@
+{
+    "id": "E005D420",
+    "path": "~/Study/STATS489/PAL_check/rotavirus/mle_gamma_study.R",
+    "project_path": "mle_gamma_study.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1698170558338.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "13,0",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1698165605,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1698165605,
+    "read_only": false,
+    "read_only_alternatives": []
+}

@@ -1,0 +1,152 @@
+---
+title: "Rota_Test"
+author: "Yize Hao"
+date: "2023-10-24"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(pomp)
+```
+
+```{r}
+rproc <- Csnippet("
+    // double N = S_1+E_1+I_1+R_1+S_2+E_2+I_2+R_2+S_3+E_3+I_3+R_3;
+    
+    double gamma = 1.0;
+    double d_1=1/(5.0*52.0);
+    N = S_1+I_1+R_1;
+    double alpha = 1/(78.86912*52.0);
+    // double delta = 1 - 1/(18.86912*52.0);
+    double omega = 1/(1.0*52.0);
+    
+    double I = I_1;
+    
+    double trans_S1[3], trans_I1[3], trans_R1[3];
+    double prob_S1[3],  prob_I1[3],  prob_R1[3];
+    
+    kappa = (1 + rho*cos(2*3.141593*t/52 + phi));
+    Beta_1 = beta1*kappa; //seasonal forcing
+    
+    // Define rate
+    prob_S1[0] = 1-exp(-Beta_1*I/N*dt); // S->I
+    prob_S1[1] = 1-exp(-d_1*dt); // F
+    prob_S1[2] = exp(-d_1*dt) - prob_S1[0];
+    
+    prob_I1[0] = 1-exp(-gamma*dt); // I->R
+    prob_I1[1] = 1-exp(-d_1*dt);
+    prob_I1[2] = exp(-gamma*dt)+exp(-d_1*dt) - 1;
+    
+    prob_R1[0] = 1 - exp(-omega*dt);  // E_1,t this goes back to S_1,(t+1)
+    prob_R1[1] = 1 - exp(-d_1*dt);
+    prob_R1[2] = exp(-omega*dt) + exp(-d_1*dt) - 1;
+    
+    /////////////////Copy Here: Debug/////////
+    prob_S10 = 1-exp(-Beta_1*I/N*dt); // S->I
+    prob_S11 = 1-exp(-d_1*dt); // F
+    prob_S12 = exp(-d_1*dt) - prob_S10;
+    
+    prob_I10 = 1-exp(-gamma*dt); // I->R
+    prob_I11 = 1-exp(-d_1*dt);
+    prob_I12 = exp(-gamma*dt)+exp(-d_1*dt) - 1;
+    
+    prob_R10 = 1 - exp(-omega*dt);  // E_1,t this goes back to S_1,(t+1)
+    prob_R11 = 1 - exp(-d_1*dt);
+    prob_R12 = exp(-omega*dt) + exp(-d_1*dt) - 1;
+    
+    // Transition
+    // B: S->I
+    // C: I->R
+    // F: Aging: (1)->(2)->(3)
+    // E: R->S
+    // D: Death
+    //// Note: Here S_1, S_2... are all old value from (t-1)
+    S_1 = 1000;
+    I_1 = 1000;
+    R_1 = 1000;
+   rmultinom(S_1, &prob_S1[0], 3, &trans_S1[0]); // B, F, S-B-F
+   rmultinom(I_1, &prob_I1[0], 3, &trans_I1[0]); // C, F, I-C-F
+   rmultinom(R_1, &prob_R1[0], 3, &trans_R1[0]); // E, F, R-E-F
+    
+    S_1 = S_1*0.454 + R_1*0.005 + rpois(alpha*N*dt); // Include Birth
+    I_1 = I_1*0.778 + S_1*0.544;
+    R_1 = R_1*0.994 + I_1*0.221;
+    
+")
+
+## ----rinit-------------------------------------------------
+rinit <- Csnippet("
+  
+  I_1 = 452;
+  S_1 = 1285492;
+  R_1 = 19586;
+  
+  N = I_1+S_1+R_1;
+  
+")
+
+
+## ----rmeasure-------------------------------------------------
+rmeas <- Csnippet("
+  cases1 = rbinom(S_1, 0.5); // this is observed cases
+")
+
+dmeas <- Csnippet("
+  lik = dbinom(cases1, H_1, 0.3, 1);
+")
+
+sim1 <- simulate(t0=0, 
+                 times = 1:416, 
+                 paramnames = c("beta1","beta2","beta3","phi","rho"),
+                 params = c(beta1 = 12.15, beta2 = 0.22, beta3 = 0.34, 
+                            phi = 0.017, rho = 0.022),
+                 rinit = rinit,
+                 rprocess = discrete_time(rproc, delta.t=0.25),
+                 rmeasure = rmeas,
+                 statenames=c("S_1","I_1","R_1","prob_S10","prob_S11","prob_S12","prob_I10","prob_I11","prob_I12","prob_R10","prob_R11","prob_R12","N","kappa","Beta_1"),
+                 obsnames=c("cases1"))
+
+(sim_data <- as.data.frame(sim1))
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=S_1),color='green') +
+ geom_line(aes(x=time, y=I_1), color='red') +
+ geom_line(aes(x=time, y=R_1), color='blue') +
+  ylab('X')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=prob_S10),color='green') +
+ geom_line(aes(x=time, y=prob_S11), color='red') +
+ geom_line(aes(x=time, y=prob_S12), color='blue') +
+  ylab('prob_S1')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=N), color='red') +
+  ylab('N')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=kappa), color='red') +
+  ylab('kappa')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=Beta_1), color='red') +
+  ylab('Beta_1')+xlab('date')
+
+ggplot(data=sim_data) + 
+ geom_line(aes(x=time, y=cases1), color='red') +
+  ylab('Y_I')+xlab('date')
+```
+
+```{r}
+y1 = 454.0;
+gamma = 1.0;
+d_1=1/(5.0*52.0);
+N = 82372825.0;
+alpha = 0.25/(78.86912*52.0);
+omega = 1/(1.0*52.0);
+  I_1 = round(y1/(gamma+d_1));
+  S_1 = round((alpha*N-(gamma+d_1)*I_1+omega*(N*alpha/d_1-I_1))/(d_1+omega));
+  R_1 = round((N*alpha/d_1-S_1-I_1));
+N = S_1+I_1+R_1
+```

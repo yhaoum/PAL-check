@@ -103,6 +103,15 @@ List rotavirus_equidispersed( arma::vec init_dist,
       lambda(4*(t)-4+i+1,0) += 4*1025.7;
     }
     
+    // void update_K(mat& K,
+    //               vec lambar,
+    //               vec betas,
+    //               double xi,
+    //               int N,
+    //               int t,
+    //               double phase,
+    //               double rho
+                    
     mat Norm = Lambda_.slice(0) + Lambda_.slice(1) + Lambda_.slice(2) + Lambda_.slice(3);
     mat Lambda = Lambda_.slice(3);
     

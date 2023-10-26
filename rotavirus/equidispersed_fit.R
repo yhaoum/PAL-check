@@ -12,7 +12,7 @@ job_id <- as.numeric(args[1])
 
 initial_guess <- c(runif(1,9,18),runif(1,0.05,0.5),runif(1,0.2,1),runif(1,0.05,0.4),runif(1,0.05,0.4))
 
-astep <- 0.5*c(0.01,0.001,0.001,0.001,0.001,0.001)
+astep <- 0.5*c(0.01,0.001,0.001,0.001,0.001,0.001) 
 cstep <- c(0.01,0.001,0.001,0.001,0.001,0.001)
 
 Coordinate_ascent_algorithm2 <- function(a,c,init_params, n_steps){
