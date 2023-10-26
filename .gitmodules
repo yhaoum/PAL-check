@@ -1,0 +1,3 @@
+[submodule "rotavirus/rotavirus/PAL"]
+	path = rotavirus/rotavirus/PAL
+	url = https://github.com/LorenzoRimella/PAL.git
