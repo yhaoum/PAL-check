@@ -1,0 +1,28 @@
+{
+    "id": "391B1ADC",
+    "path": null,
+    "project_path": null,
+    "type": "object_explorer",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1698364193470.0,
+    "source_on_save": false,
+    "relative_order": 6,
+    "properties": {
+        "id": "ab6b32c4a6c6480792b8206089b967e1",
+        "name": "mifs_global",
+        "title": "mifs_global",
+        "language": "R",
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 0,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1698364193470,
+    "read_only": false,
+    "read_only_alternatives": []
+}

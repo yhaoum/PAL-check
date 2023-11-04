@@ -1,0 +1,6 @@
+"0",""
+"0","ggplot(data=dat) + "
+"0","  geom_line(aes(x=time, y=cases1),color='green') +"
+"0","  geom_line(aes(x=time, y=cases2), color='red') +"
+"0","  geom_line(aes(x=time, y=cases3), color='blue') +"
+"0","  ylab('Y_real')+xlab('date')"

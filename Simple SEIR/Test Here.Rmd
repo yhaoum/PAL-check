@@ -63,6 +63,7 @@ rinit <- Csnippet("
 ## ----rmeasure-------------------------------------------------
 rmeas <- Csnippet("
   Y_I = rbinom(I, q_I); // this is observed cases
+<<<<<<< HEAD
 ")
 
 dmeas <- Csnippet("
@@ -85,6 +86,13 @@ sim1 <- simulate(t0=0,
                  obsnames=c("Y_I"))
 
 (sim_data <- as.data.frame(sim1))
+=======
+")
+
+dmeas <- Csnippet("
+  lik = dbinom(Y_I, I, q_I, 1);
+")
+>>>>>>> refs/remotes/origin/master
 
 
 ggplot(data=sim_data) + 

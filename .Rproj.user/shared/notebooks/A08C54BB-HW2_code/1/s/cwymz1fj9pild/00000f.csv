@@ -1,0 +1,4 @@
+"0","sum = as.data.frame(c(var(sig), var(sig_L), var(sig_t), var(sig_e)))"
+"0","rownames(sum) = c('Gaussian', 'Laplacian', 't', 'Centered Exp')"
+"0","colnames(sum) = 'Variance'"
+"0","sum"

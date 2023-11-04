@@ -1,0 +1,685 @@
+---
+title: "WWR+Stocks"
+author: "Yize Hao"
+date: "2023-11-02"
+output: html_document
+---
+
+#### WWR's Data + Stocks' Model
+
+```{r}
+rm(list = ls())     # clear objects  
+graphics.off()      # close graphics windows
+# close graphics windows
+library(pomp)
+library(magrittr)
+library(plyr)
+library(reshape2)
+library(ggplot2)
+library(scales)
+library(foreach)
+library(doParallel)
+registerDoParallel()
+stopifnot(packageVersion("pomp") >= "1.7")
+```
+
+#### Stocks' Original
+
+```{r}
+# measurement model 
+dmeas <- Csnippet("
+                  if (ISNA(cases1)) {
+                  lik = (give_log) ? 0 : 1;
+                  } else {
+                  lik =  dnbinom_mu(cases1, 1/od, H1, 1) +
+                  dnbinom_mu(cases2, 1/od, H2, 1) +
+                  dnbinom_mu(cases3, 1/od, H3, 1);
+                  lik = (give_log) ? lik : exp(lik);}")
+rmeas <-  Csnippet("
+                   cases1 = rnbinom_mu(1/od,H1);
+                   cases2 = rnbinom_mu(1/od,H2);
+                   cases3 = rnbinom_mu(1/od,H3);")
+
+
+
+# process model is Markovian SIRS with 3 age classes
+sir.step <- Csnippet("
+                     double rate[19];
+                     double dN[19];
+                     double Beta1;
+                     double Beta2;
+                     double Beta3;
+                     double I;
+                     double dW;
+                     
+                     // compute the environmental stochasticity
+                     dW = rgammawn(sigma,dt);
+                     I= I1+I2+I3;
+                     Beta1 = beta1*(1 + beta11 * cos(M_2PI/52*t + phi));
+                     Beta2 = beta2*(1 + beta11 * cos(M_2PI/52*t + phi));
+                     Beta3 = beta3*(1 + beta11 * cos(M_2PI/52*t + phi));
+                     rate[0] = alpha*N;         // Birth
+                     rate[1] = Beta1*I/N*dW/dt; // S1 Trans: dW is gamma white noise, i.e. st in X.
+                     rate[2] = delta1;          // S1 Aging
+                     rate[3] = Beta2*I/N*dW/dt; // S2 Trans
+                     rate[4] = delta2;          // S2 Aging
+                     rate[5] = Beta3*I/N*dW/dt; // S3 Trans
+                     rate[6] = mu;              // S3 Death
+                     rate[7] = gamma;           // I1 Trans
+                     rate[8] = delta1;          // I2 Aging
+                     rate[9] = gamma;           // I2 Trnas
+                     rate[10] = delta2;         // I2 Aging
+                     rate[11] = gamma;          // I3 Trans
+                     rate[12] = mu;             // I3 Death
+                     rate[13] = delta1;         // R1 Aging
+                     rate[14] = omega;          // R1 Trans
+                     rate[15] = delta2;         // R2 Aging
+                     rate[16] = omega;          // R2 Trans
+                     rate[17] = mu;             // R3 Death
+                     rate[18] = omega;          // R3 Trans
+                     dN[0] = rpois(rate[0]*dt); // alpha*N*dt
+                     reulermultinom(2, S1, &rate[1], dt, &dN[1]);
+                     reulermultinom(2, S2, &rate[3], dt, &dN[3]);
+                     reulermultinom(2, S3, &rate[5], dt, &dN[5]);
+                     reulermultinom(2, I1, &rate[7], dt, &dN[7]);
+                     reulermultinom(2, I2, &rate[9], dt, &dN[9]);
+                     reulermultinom(2, I3, &rate[11], dt, &dN[11]);
+                     reulermultinom(2, R1, &rate[13], dt, &dN[13]);
+                     reulermultinom(2, R2, &rate[15], dt, &dN[15]);
+                     reulermultinom(2, R3, &rate[17], dt, &dN[17]);
+                     S1 += dN[0] - dN[1] - dN[2] + dN[14];
+                     S2 += dN[2] - dN[3] - dN[4]  + dN[16];
+                     S3 += dN[4] - dN[5] - dN[6] + dN[18];
+                     I1 += dN[1]          - dN[7] - dN[8];
+                     I2 += dN[3] + dN[8]  - dN[9] - dN[10];
+                     I3 += dN[5] + dN[10] - dN[11] - dN[12];
+                     R1 += dN[7]           - dN[13] - dN[14];
+                     R2 += dN[9]  + dN[13] - dN[15] - dN[16];
+                     R3 += dN[11] + dN[15] - dN[17] - dN[18];
+                     H1 += dN[1];
+                     H2 += dN[3];
+                     H3 += dN[5];
+                     ")
+
+
+
+# ------------ deterministic skeleton-----------------------------
+sir.skel <- "
+double rate[19];
+double term[19];
+double Beta1;
+double Beta2;
+double Beta3;
+
+Beta1 = beta1*(1 + beta11 * cos(M_2PI/52*t + phi)); //seasonal forcing
+Beta2 = beta2*(1 + beta11 * cos(M_2PI/52*t + phi)); //seasonal forcing
+Beta3 = beta3*(1 + beta11 * cos(M_2PI/52*t + phi)); //seasonal forcing
+
+rate[0] = alpha*N;
+rate[1] = Beta1*(I1+I2+I3)/N;
+rate[2] = delta1;
+
+rate[3] = Beta2*(I1+I2+I3)/N;
+rate[4] = delta2;
+
+rate[5] = Beta3*(I1+I2+I3)/N;
+rate[6] = mu;
+
+rate[7] = gamma;
+rate[8] = delta1;
+
+rate[9] = gamma;
+rate[10] = delta2;
+
+rate[11] = gamma;
+rate[12] = mu;
+
+rate[13] = delta1;
+rate[14] = omega;  
+
+rate[15] = delta2;  
+rate[16] = omega;  
+
+rate[17] = mu;  
+rate[18] = omega;  
+
+
+// compute the several terms
+term[0] = rate[0];
+
+term[1] = rate[1] * S1;
+term[2] = rate[2] * S1;
+
+term[3] = rate[3] * S2;
+term[4] = rate[4] * S2;
+
+term[5] = rate[5] * S3;
+term[6] = rate[6] * S3;
+
+term[7] = rate[7] * I1;
+term[8] = rate[8] * I1;
+
+term[9] = rate[9] * I2;
+term[10] = rate[10] * I2;
+
+term[11] = rate[11] * I3;
+term[12] = rate[12] * I3;
+
+term[13] = rate[13] * R1;
+term[14] = rate[14] * R1;
+
+term[15] = rate[15] * R2;
+term[16] = rate[16] * R2;
+
+term[17] = rate[17] * R3;
+term[18] = rate[18] * R3;
+
+
+DS1 = term[0] - term[1] - term[2] + term[14];
+DI1 = term[1]          - term[7] - term[8];
+DR1 = term[7]          - term[13] - term[14];
+DH1 = term[1];
+
+DS2 = term[2] - term[3] - term[4]  + term[16];
+DI2 = term[3] + term[8]  - term[9] - term[10];
+DR2 = term[9]  + term[13] - term[15] - term[16];
+DH2 = term[3];
+
+DS3 = term[4] - term[5] - term[6] + term[18];
+DI3 = term[5] + term[10] - term[11] - term[12];
+DR3 = term[11] + term[15] - term[17] - term[18];
+DH3 = term[5];
+
+" 
+
+# read in the data
+# add at t=0 a row of NAs to not have problems with the accumulator variable since
+# t0 is much less than t[1]
+setwd("~/Study/STATS489/PAL_check/rotavirus/pomp-astic/pomp_st+st+/pomp_st+st+_data/mle_gamma_data")
+read.table("rotavirus.txt") %>%
+  rbind(data.frame(time=0,cases1=NA,cases2=NA,cases3=NA)) %>%
+  arrange(time) -> dat
+
+
+# define parameters (without betas)
+params_fixed <- c(gamma=1, delta1=1/(5*52),delta2=1/(55*52), alpha=1/(78.86912*52), 
+                  mu=1/(18.86912*52), N=82372825, omega=1/(1*52))
+first_data <- c(y1=dat$cases1[2], y2=dat$cases2[2], y3=dat$cases3[2])
+
+
+# initializer
+init <- function(params, t0, ...) {
+  x0 <- c(S1=0,I1=0,R1=0,H1=0,S2=0,I2=0,R2=0,H2=0,S3=0,I3=0,R3=0,H3=0)
+  y <- params[c("y1","y2","y3")]
+  x0["I1"] <- y[1]/((params["gamma"]+params["delta1"]))
+  x0["I2"] <- (y[2]+params["delta1"]*x0["I1"])/((params["delta2"]+params["gamma"]))
+  x0["I3"] <- (y[3]+params["delta2"]*x0["I2"])/((params["mu"]+params["gamma"]))
+  x0["S1"] <- (params["alpha"]*params["N"]-(params["gamma"]+params["delta1"])*x0["I1"]+
+                 params["omega"]*(params["N"]*params["alpha"]/params["delta1"]-x0["I1"]))/(params["delta1"]+params["omega"])
+  I_bar    <-  x0["I1"]+x0["I2"]+x0["I3"]
+  x0["S2"] <- (params["delta1"]*x0["S1"]-(params["delta2"]+params["gamma"])*x0["I2"]+params["delta1"]*x0["I1"]+
+                 params["omega"]*(params["N"]*params["alpha"]/params["delta2"]-x0["I2"]))/(params["delta2"]+params["omega"])
+  x0["S3"] <- (params["delta2"]*x0["S2"]-(params["gamma"]+params["mu"])*x0["I3"]+params["delta2"]*x0["I2"]+
+                 params["omega"]*(params["N"]*params["alpha"]/params["mu"]-x0["I3"]))/(params["omega"]+params["mu"])
+  x0["R1"] <- (params["N"]*params["alpha"]/params["delta1"]-x0["S1"]-x0["I1"])
+  x0["R2"] <- (params["N"]*params["alpha"]/params["delta2"]-x0["S2"]-x0["I2"])
+  x0["R3"] <- (params["N"]*params["alpha"]/params["mu"]-x0["S3"]-x0["I3"])
+  round(x0) 
+}
+
+## ----rinit-------------------------------------------------
+rinit_raw <- Csnippet("
+  I1 = nearbyint(y1/(gamma+delta1));
+  I2 = nearbyint((y2+delta1*I1)/((delta2+gamma)));
+  I3 = nearbyint((y3+delta2*I2)/((mu+gamma)));
+  S1 = nearbyint((alpha*N-(gamma+delta1)*I1+omega*(N*alpha/delta1-I1))/(delta1+omega));
+  S2 = nearbyint((delta1*S1-(delta2+gamma)*I2+delta1*I1+omega*(N*alpha/delta2-I2))/(delta2+omega));
+  S3 = nearbyint((delta2*S2-(gamma+mu)*I3+delta2*I2+omega*(N*alpha/mu-I3))/(omega+mu));
+  R1 = nearbyint((N*alpha/delta1-S1-I1));
+  R2 = nearbyint((N*alpha/delta2-S2-I2));
+  R3 = nearbyint((N*alpha/mu-S3-I3));
+")
+
+rinit <- Csnippet("
+    I1=2871;
+    I2=639;
+    I3=174;
+    S1=5.09484e+06;
+    S2=5.73856e+07;
+    S3=1.96976e+07;
+    R1=124410;
+    R2=57072;
+    R3=9578;
+    H1 = 0;
+    H2 = 0;
+    H3 = 0;
+")
+
+#help parameters with different data ie the mean data
+mean_data <- c(y1=mean(dat$cases1[-1]), y2=mean(dat$cases2[-1]), y3=mean(dat$cases3[-1])) 
+help_param <- c(params_fixed,mean_data)
+# analytic guess for the betas
+beta_ana <-  function(params){
+  beta_ana <- c(beta1=0, beta2=0, beta3=0)
+  I_bar <- init(params)["I1"]+init(params)["I2"]+init(params)["I3"]
+  beta_ana["beta1"] <- ((params["gamma"]+params["delta1"])*init(params)["I1"]*params["N"])/(init(params)["S1"]*I_bar)
+  beta_ana["beta2"] <- ((params["delta2"]+params["gamma"])*init(params)["I2"]-params["delta1"]*init(params)["I1"])*params["N"]/(init(params)["S2"]*I_bar)
+  beta_ana["beta3"] <- ((params["mu"]+params["gamma"])*init(params)["I3"]-params["delta2"]*init(params)["I2"])*params["N"]/(init(params)["S3"]*I_bar)
+  return(beta_ana)
+}
+
+params <- c(beta_ana(help_param), beta11=0.15, phi=0.1, params_fixed,first_data,od=0.3, sigma=0.05)
+params_stocks <- params
+toEst<- Csnippet("
+                 Tbeta1  = log(beta1);
+                 Tbeta2  = log(beta2);
+                 Tbeta3  = log(beta3);
+                 Tbeta11 = logit(beta11);
+                 Tsigma = log(sigma);
+                 Tphi    = logit(phi/(M_2PI));
+                 Tod = log(od);")
+
+fromEst <-Csnippet("
+                   beta1  = exp(Tbeta1);
+                   beta2  = exp(Tbeta2);
+                   beta3  = exp(Tbeta3);
+                   sigma = exp(Tsigma);
+                   beta11 = expit(Tbeta11);
+                   phi    = M_2PI*expit(Tphi);
+                   od = exp(Tod);")
+```
+
+##### Simulate
+
+```{r}
+# Set to MLE
+params_stocks_stst_mle <- params_stocks
+
+params_stocks_stst_mle["beta1"] <- 11.298
+params_stocks_stst_mle["beta2"] <- 0.267
+params_stocks_stst_mle["beta3"] <- 0.433
+params_stocks_stst_mle["beta11"] <- 0.148
+params_stocks_stst_mle["phi"] <- 0.085
+params_stocks_stst_mle["od"] <- 0.111
+params_stocks_stst_mle["sigma"] <- 0.091
+```
+
+```{r}
+sim1 <- simulate(t0=0,
+                 times=c(1:416),
+                 dmeasure = dmeas,
+                 rmeasure = rmeas,
+                 rprocess = euler(step.fun = sir.step, delta.t = 1/10),
+                 statenames = c("S1", "I1", "R1", "H1", "S2", "I2", "R2", "H2","S3","I3", "R3", "H3"),
+                 obsnames=c("cases1","cases2","cases3"),
+                 paramnames = names(params),
+                 accumvars=c("H1", "H2", "H3"),
+                 skeleton=vectorfield(Csnippet(sir.skel)),
+                 rinit=rinit,
+                 toEstimationScale=toEst,
+                 fromEstimationScale=fromEst,
+                 params = params_stocks_stst_mle
+                 )
+
+(sim_data <- as.data.frame(sim1))
+
+ggplot(data=dat) + 
+  geom_line(aes(x=time, y=cases1),color='green') +
+  geom_line(aes(x=time, y=cases2), color='red') +
+  geom_line(aes(x=time, y=cases3), color='blue') +
+  ylab('Y_real')+xlab('date')
+
+ggplot(data=sim_data) + 
+  geom_line(aes(x=time, y=cases1),color='green') +
+  geom_line(aes(x=time, y=cases2), color='red') +
+  geom_line(aes(x=time, y=cases3), color='blue') +
+  ylab('Y_mine')+xlab('date')
+```
+
+##### Pfilter
+
+```{r}
+pomp(data = dat,
+     times="time",
+     t0=1-6*52,
+     dmeasure = dmeas,
+     rmeasure = rmeas,
+     rprocess = euler(step.fun = sir.step, delta.t = 1/10),
+     statenames = c("S1", "I1", "R1", "H1", "S2", "I2", "R2", "H2","S3","I3", "R3", "H3"),
+     paramnames = names(params),
+     accumvars=c("H1", "H2", "H3"),
+     skeleton=vectorfield(Csnippet(sir.skel)),
+     rinit=rinit_raw,
+     toEstimationScale=toEst,
+     fromEstimationScale=fromEst,
+     params = params_stocks_stst_mle
+) -> sir
+
+## Pfilter
+theta <- params_stocks_stst_mle
+
+
+plan(multicore)
+foreach(i=1:4, .combine=c,
+        .options.future=list(seed=998468235L)
+) %dopar% {
+  pfilter(sir,Np=10000,params=theta)
+} -> pfs
+
+logmeanexp(logLik(pfs),se=TRUE)
+```
+The estimated LL is $-10060.37$, which is reproted as $-10060.19$ as in Stocks(2020). Thus we have confirmed the St+St+ result is correctly reported. Next, we check StSt+. First trying to figure what's changed from St+ to St in states of X. Guess no 
+
+#### WWR-Potential Model
+
+```{r}
+# measurement model 
+dmeas <- Csnippet("
+                  if (ISNA(cases1)) {
+                  lik = (give_log) ? 0 : 1;
+                  } else {
+                  lik =  dnbinom_mu(cases1, 1/od, H1, 1) +
+                  dnbinom_mu(cases2, 1/od, H2, 1) +
+                  dnbinom_mu(cases3, 1/od, H3, 1);
+                  lik = (give_log) ? lik : exp(lik);}")
+rmeas <-  Csnippet("
+                   cases1 = rnbinom_mu(1/od,H1);
+                   cases2 = rnbinom_mu(1/od,H2);
+                   cases3 = rnbinom_mu(1/od,H3);")
+
+
+
+# process model is Markovian SIRS with 3 age classes
+sir.step <- Csnippet("
+                     double rate[19];
+                     double dN[19];
+                     double Beta1;
+                     double Beta2;
+                     double Beta3;
+                     double I;
+                     double dW;
+                     
+                     // compute the environmental stochasticity
+                     dW = rgammawn(sigma,dt);
+                     I= I1+I2+I3;
+                     Beta1 = beta1*(1 + beta11 * cos(M_2PI/52*t + phi));
+                     Beta2 = beta2*(1 + beta11 * cos(M_2PI/52*t + phi));
+                     Beta3 = beta3*(1 + beta11 * cos(M_2PI/52*t + phi));
+                     rate[0] = alpha*N;         // Birth
+                     rate[1] = Beta1*I/N*dW/dt; // S1 Trans: dW is gamma white noise, i.e. st in X.
+                     rate[2] = delta1;          // S1 Aging
+                     rate[3] = Beta2*I/N*dW/dt; // S2 Trans
+                     rate[4] = delta2;          // S2 Aging
+                     rate[5] = Beta3*I/N*dW/dt; // S3 Trans
+                     rate[6] = mu;              // S3 Death
+                     rate[7] = gamma;           // I1 Trans
+                     rate[8] = delta1;          // I2 Aging
+                     rate[9] = gamma;           // I2 Trnas
+                     rate[10] = delta2;         // I2 Aging
+                     rate[11] = gamma;          // I3 Trans
+                     rate[12] = mu;             // I3 Death
+                     rate[13] = delta1;         // R1 Aging
+                     rate[14] = omega;          // R1 Trans
+                     rate[15] = delta2;         // R2 Aging
+                     rate[16] = omega;          // R2 Trans
+                     rate[17] = mu;             // R3 Death
+                     rate[18] = omega;          // R3 Trans
+                     dN[0] = rpois(rate[0]*dt); // alpha*N*dt
+                     reulermultinom(2, S1, &rate[1], dt, &dN[1]);
+                     reulermultinom(2, S2, &rate[3], dt, &dN[3]);
+                     reulermultinom(2, S3, &rate[5], dt, &dN[5]);
+                     reulermultinom(2, I1, &rate[7], dt, &dN[7]);
+                     reulermultinom(2, I2, &rate[9], dt, &dN[9]);
+                     reulermultinom(2, I3, &rate[11], dt, &dN[11]);
+                     reulermultinom(2, R1, &rate[13], dt, &dN[13]);
+                     reulermultinom(2, R2, &rate[15], dt, &dN[15]);
+                     reulermultinom(2, R3, &rate[17], dt, &dN[17]);
+                     S1 += dN[0] - dN[1] - dN[2] + dN[14];
+                     S2 += dN[2] - dN[3] - dN[4]  + dN[16];
+                     S3 += dN[4] - dN[5] - dN[6] + dN[18];
+                     I1 += dN[1]          - dN[7] - dN[8];
+                     I2 += dN[3] + dN[8]  - dN[9] - dN[10];
+                     I3 += dN[5] + dN[10] - dN[11] - dN[12];
+                     R1 += dN[7]           - dN[13] - dN[14];
+                     R2 += dN[9]  + dN[13] - dN[15] - dN[16];
+                     R3 += dN[11] + dN[15] - dN[17] - dN[18];
+                     H1 += dN[1];
+                     H2 += dN[3];
+                     H3 += dN[5];
+                     ")
+
+
+
+# ------------ deterministic skeleton-----------------------------
+sir.skel <- "
+double rate[19];
+double term[19];
+double Beta1;
+double Beta2;
+double Beta3;
+
+Beta1 = beta1*(1 + beta11 * cos(M_2PI/52*t + phi)); //seasonal forcing
+Beta2 = beta2*(1 + beta11 * cos(M_2PI/52*t + phi)); //seasonal forcing
+Beta3 = beta3*(1 + beta11 * cos(M_2PI/52*t + phi)); //seasonal forcing
+
+rate[0] = alpha*N;
+rate[1] = Beta1*(I1+I2+I3)/N;
+rate[2] = delta1;
+
+rate[3] = Beta2*(I1+I2+I3)/N;
+rate[4] = delta2;
+
+rate[5] = Beta3*(I1+I2+I3)/N;
+rate[6] = mu;
+
+rate[7] = gamma;
+rate[8] = delta1;
+
+rate[9] = gamma;
+rate[10] = delta2;
+
+rate[11] = gamma;
+rate[12] = mu;
+
+rate[13] = delta1;
+rate[14] = omega;  
+
+rate[15] = delta2;  
+rate[16] = omega;  
+
+rate[17] = mu;  
+rate[18] = omega;  
+
+
+// compute the several terms
+term[0] = rate[0];
+
+term[1] = rate[1] * S1;
+term[2] = rate[2] * S1;
+
+term[3] = rate[3] * S2;
+term[4] = rate[4] * S2;
+
+term[5] = rate[5] * S3;
+term[6] = rate[6] * S3;
+
+term[7] = rate[7] * I1;
+term[8] = rate[8] * I1;
+
+term[9] = rate[9] * I2;
+term[10] = rate[10] * I2;
+
+term[11] = rate[11] * I3;
+term[12] = rate[12] * I3;
+
+term[13] = rate[13] * R1;
+term[14] = rate[14] * R1;
+
+term[15] = rate[15] * R2;
+term[16] = rate[16] * R2;
+
+term[17] = rate[17] * R3;
+term[18] = rate[18] * R3;
+
+
+DS1 = term[0] - term[1] - term[2] + term[14];
+DI1 = term[1]          - term[7] - term[8];
+DR1 = term[7]          - term[13] - term[14];
+DH1 = term[1];
+
+DS2 = term[2] - term[3] - term[4]  + term[16];
+DI2 = term[3] + term[8]  - term[9] - term[10];
+DR2 = term[9]  + term[13] - term[15] - term[16];
+DH2 = term[3];
+
+DS3 = term[4] - term[5] - term[6] + term[18];
+DI3 = term[5] + term[10] - term[11] - term[12];
+DR3 = term[11] + term[15] - term[17] - term[18];
+DH3 = term[5];
+
+" 
+
+rinit <- Csnippet("
+    I1=2871;
+    I2=639;
+    I3=174;
+    S1=5.09484e+06;
+    S2=5.73856e+07;
+    S3=1.96976e+07;
+    R1=124410;
+    R2=57072;
+    R3=9578;
+    H1 = 0;
+    H2 = 0;
+    H3 = 0;
+")
+
+toEst<- Csnippet("
+                 Tbeta1  = log(beta1);
+                 Tbeta2  = log(beta2);
+                 Tbeta3  = log(beta3);
+                 Tbeta11 = logit(beta11);
+                 Tsigma = log(sigma);
+                 Tphi    = logit(phi/(M_2PI));
+                 Tod = log(od);")
+
+fromEst <-Csnippet("
+                   beta1  = exp(Tbeta1);
+                   beta2  = exp(Tbeta2);
+                   beta3  = exp(Tbeta3);
+                   sigma = exp(Tsigma);
+                   beta11 = expit(Tbeta11);
+                   phi    = M_2PI*expit(Tphi);
+                   od = exp(Tod);")
+
+pomp(data = dat,
+     times="time",
+     t0=1-6*52,
+     dmeasure = dmeas,
+     rmeasure = rmeas,
+     rprocess = euler(step.fun = sir.step, delta.t = 1/10),
+     statenames = c("S1", "I1", "R1", "H1", "S2", "I2", "R2", "H2","S3","I3", "R3", "H3"),
+     paramnames = names(params),
+     accumvars=c("H1", "H2", "H3"),
+     skeleton=vectorfield(Csnippet(sir.skel)),
+     rinit=rinit_raw,
+     toEstimationScale=toEst,
+     fromEstimationScale=fromEst,
+     params = params_stocks
+) -> sir
+```
+
+##### Simulate
+
+```{r}
+sim1 <- simulate(t0=0,
+                 times=c(1:416),
+                 dmeasure = dmeas,
+                 rmeasure = rmeas,
+                 rprocess = euler(step.fun = sir.step, delta.t = 1/10),
+                 statenames = c("S1", "I1", "R1", "H1", "S2", "I2", "R2", "H2","S3","I3", "R3", "H3"),
+                 obsnames=c("cases1","cases2","cases3"),
+                 paramnames = names(params),
+                 accumvars=c("H1", "H2", "H3"),
+                 skeleton=vectorfield(Csnippet(sir.skel)),
+                 rinit=rinit,
+                 toEstimationScale=toEst,
+                 fromEstimationScale=fromEst,
+                 params = params
+                 )
+
+(sim_data <- as.data.frame(sim1))
+
+ggplot(data=dat) + 
+  geom_line(aes(x=time, y=cases1),color='green') +
+  geom_line(aes(x=time, y=cases2), color='red') +
+  geom_line(aes(x=time, y=cases3), color='blue') +
+  ylab('Y_real')+xlab('date')
+
+ggplot(data=sim_data) + 
+  geom_line(aes(x=time, y=cases1),color='green') +
+  geom_line(aes(x=time, y=cases2), color='red') +
+  geom_line(aes(x=time, y=cases3), color='blue') +
+  ylab('Y_mine')+xlab('date')
+
+
+## Pfilter
+theta <- params
+
+plan(multicore)
+foreach(i=1:4, .combine=c,
+        .options.future=list(seed=998468235L)
+) %dopar% {
+  pfilter(sir,Np=10000,params=theta)
+} -> pfs
+
+logmeanexp(logLik(pfs),se=TRUE)
+```
+
+##### Pfilter
+
+```{r}
+
+```
+
+```{r}
+require(doParallel)
+cores <- 36
+registerDoParallel(cores)
+mcopts <- list(set.seed=TRUE)
+
+
+sir_box <- rbind(
+  beta1=c(10,15),
+  beta2=c(0.2,0.40),
+  beta3=c(0.3,0.5),
+  beta11=c(0.11,0.16),
+  phi=c(0.01,0.3),
+  od=c(0.001,0.3),
+  sigma=c(0.001,0.2)
+)
+
+sobol_design(
+  lower=c(beta1=10,beta2=0.2,beta3=0.3,beta11=0.11,phi=0.01,od=0.001,sigma=0.001),
+  upper=c(beta1=15,beta2=0.4,beta3=0.5,beta11=0.16,phi=0.3,od=0.3,sigma=0.2),
+  nseq=100
+) -> guesses
+
+sir_fixed_params <- c(params_fixed, y1=dat$cases1[2], y2=dat$cases2[2], y3=dat$cases3[2])
+
+bake(file = "mif_check.rds",{ 
+     mifs_global <- foreach(i=1:cores,.packages='pomp', .options.multicore=mcopts) %dopar% {
+  mif2(
+    sir,
+    start=c(apply(sir_box,1,function(x)runif(1,min=x[1],max=x[2])),sir_fixed_params),
+    Np=NP_MIF,
+    Nmif=NMIF,
+    cooling.type="geometric",
+    cooling.fraction.50=0.5,
+    transform=TRUE,
+    rw.sd=rw_sd(beta1=0.002,beta2=0.002,beta3=0.002,beta11=0.001,phi=0.01,od=0.01, sigma=0.01)
+  )
+     }
+    mifs_global
+})
+```

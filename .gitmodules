@@ -1,0 +1,9 @@
+[submodule "rotavirus/rotavirus/PAL"]
+	path = rotavirus/rotavirus/PAL
+	url = https://github.com/LorenzoRimella/PAL.git
+[submodule "rotavirus/rotavirus/pomp-astic"]
+	path = rotavirus/rotavirus/pomp-astic
+	url = https://github.com/theresasophia/pomp-astic.git
+[submodule "rotavirus/rotavirus/thesis_code"]
+	path = rotavirus/rotavirus/thesis_code
+	url = https://github.com/weidemannf/thesis_code.git

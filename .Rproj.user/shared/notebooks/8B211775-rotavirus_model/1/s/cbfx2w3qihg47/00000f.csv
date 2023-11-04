@@ -1,0 +1,5 @@
+"0","rm(list = ls())     # clear objects  "
+"0","graphics.off()      # close graphics windows"
+"0","library(pomp)"
+"0","library(doFuture)"
+"0","library(ggplot2)"

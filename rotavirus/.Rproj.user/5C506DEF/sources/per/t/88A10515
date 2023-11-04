@@ -1,0 +1,26 @@
+{
+    "id": "88A10515",
+    "path": "~/Study/STATS489/PAL_check/rotavirus/pomp-astic/pomp_st+st+/pomp_st+st+_data/mle_gamma_data/mle_gamma_data.R",
+    "project_path": "pomp-astic/pomp_st+st+/pomp_st+st+_data/mle_gamma_data/mle_gamma_data.R",
+    "type": "r_source",
+    "hash": "2043523690",
+    "contents": "",
+    "dirty": false,
+    "created": 1698346985975.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "6,17",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1698767560,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1698767560981,
+    "read_only": false,
+    "read_only_alternatives": []
+}

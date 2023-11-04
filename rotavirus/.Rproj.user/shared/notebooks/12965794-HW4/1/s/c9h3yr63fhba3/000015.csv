@@ -1,0 +1,6 @@
+"0","theta_remain <- theta[1001:10000]"
+"0","a <- seq(min(theta_remain), max(theta_remain), length=9000)"
+"0","y <- dt(a, df=3)"
+"0","yy <- rt(n,df=3)"
+"0","dat <- data.frame(theta_remain,y,a)"
+"0","hist(theta_remain, prob=T, ylim = c(0, max(y)))"

@@ -1,0 +1,5 @@
+"0","#note use raw count otu like previous chunk"
+"0","GP <- prune_species(speciesSums(ps) > 0, ps)"
+"0","plot_richness(GP, x = ""Group"") +"
+"0","  geom_boxplot(alpha=0.6)+ "
+"0","  theme(legend.position=""none"", axis.text.x=element_text(angle=45,hjust=1,vjust=1,size=12))"

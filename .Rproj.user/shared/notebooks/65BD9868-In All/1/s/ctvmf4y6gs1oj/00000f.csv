@@ -1,0 +1,268 @@
+"0","#Load libraries"
+"0","library(ggplot2)"
+"0","library(tidyverse)"
+"2","── [1mAttaching core tidyverse packages[22m ─────────────
+[32m✔[39m [34mdplyr    [39m 1.1.3     [32m✔[39m [34mreadr    [39m 2.1.4
+[32m✔[39m [34mforcats  [39m 1.0.0     [32m✔[39m [34mstringr  [39m 1.5.0
+[32m✔[39m [34mlubridate[39m 1.9.2     [32m✔[39m [34mtibble   [39m 3.2.1
+[32m✔[39m [34mpurrr    [39m 1.0.2     [32m✔[39m [34mtidyr    [39m 1.3.0"
+"2","── [1mConflicts[22m ──────────── tidyverse_conflicts() ──
+[31m✖[39m [34mdplyr[39m::[32mfilter()[39m masks [34mstats[39m::filter()
+[31m✖[39m [34mdplyr[39m::[32mlag()[39m    masks [34mstats[39m::lag()
+[36mℹ[39m Use the ]8;;http://conflicted.r-lib.org/conflicted package]8;; to force all conflicts to become errors"
+"0","library(vegan)"
+"2","Loading required package: permute
+"
+"2","Loading required package: lattice
+"
+"2","This is vegan 2.6-4
+"
+"0","library(dplyr)"
+"0","library(scales)"
+"2","
+Attaching package: ‘scales’
+
+"
+"2","The following object is masked from ‘package:purrr’:
+
+    discard
+
+"
+"2","The following object is masked from ‘package:readr’:
+
+    col_factor
+
+"
+"0","library(grid)"
+"0","library(reshape2)"
+"2","
+Attaching package: ‘reshape2’
+
+"
+"2","The following object is masked from ‘package:tidyr’:
+
+    smiths
+
+"
+"0","library(phyloseq)"
+"0","library(cluster)     "
+"0","library(factoextra)  "
+"2","Welcome! Want to learn more? See two factoextra-related books at https://goo.gl/ve3WBa
+"
+"0","library(readxl)"
+"0","library(openxlsx)"
+"0","library(knitr)"
+"0","library(MASS)"
+"2","
+Attaching package: ‘MASS’
+
+"
+"2","The following object is masked from ‘package:dplyr’:
+
+    select
+
+"
+"0","library(ClusterR)"
+"0","library(cluster)"
+"0","library(ecodist)"
+"2","
+Attaching package: ‘ecodist’
+
+"
+"2","The following object is masked from ‘package:phyloseq’:
+
+    distance
+
+"
+"2","The following object is masked from ‘package:vegan’:
+
+    mantel
+
+"
+"0","library(mixOmics)"
+"2","
+Loaded mixOmics 6.22.0
+Thank you for using mixOmics!
+Tutorials: http://mixomics.org
+Bookdown vignette: https://mixomicsteam.github.io/Bookdown
+Questions, issues: Follow the prompts at http://mixomics.org/contact-us
+Cite us:  citation('mixOmics')
+
+"
+"2","
+Attaching package: ‘mixOmics’
+
+"
+"2","The following object is masked from ‘package:purrr’:
+
+    map
+
+"
+"0","library(qiime2R)"
+"2","Registered S3 method overwritten by 'htmlwidgets':
+  method           from         
+  print.htmlwidget tools:rstudio
+"
+"0","library(glmnet)"
+"2","Loading required package: Matrix
+"
+"2","
+Attaching package: ‘Matrix’
+
+"
+"2","The following objects are masked from ‘package:tidyr’:
+
+    expand, pack, unpack
+
+"
+"2","Loaded glmnet 4.1-8
+"
+"0","library(MASS)"
+"0","library(Davies)"
+"0","library(plotly)"
+"2","
+Attaching package: ‘plotly’
+
+"
+"2","The following object is masked from ‘package:MASS’:
+
+    select
+
+"
+"2","The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+"
+"2","The following object is masked from ‘package:stats’:
+
+    filter
+
+"
+"2","The following object is masked from ‘package:graphics’:
+
+    layout
+
+"
+"0","library(stats)"
+"0","library(ggbiplot)"
+"2","Loading required package: plyr
+"
+"2","------------------------------------------------
+"
+"2","You have loaded plyr after dplyr - this is likely to cause problems.
+If you need functions from both plyr and dplyr, please load plyr first, then dplyr:
+library(plyr); library(dplyr)
+"
+"2","------------------------------------------------
+"
+"2","
+Attaching package: ‘plyr’
+
+"
+"2","The following objects are masked from ‘package:plotly’:
+
+    arrange, mutate, rename, summarise
+
+"
+"2","The following objects are masked from ‘package:dplyr’:
+
+    arrange, count, desc, failwith, id,
+    mutate, rename, summarise, summarize
+
+"
+"2","The following object is masked from ‘package:purrr’:
+
+    compact
+
+"
+"0","library(gridExtra)"
+"2","
+Attaching package: ‘gridExtra’
+
+"
+"2","The following object is masked from ‘package:dplyr’:
+
+    combine
+
+"
+"0","library(caret)"
+"2","
+Attaching package: ‘caret’
+
+"
+"2","The following objects are masked from ‘package:mixOmics’:
+
+    nearZeroVar, plsda, splsda
+
+"
+"2","The following object is masked from ‘package:vegan’:
+
+    tolerance
+
+"
+"2","The following object is masked from ‘package:purrr’:
+
+    lift
+
+"
+"0","library(compositions)"
+"2","Welcome to compositions, a package for compositional data analysis.
+Find an intro with ""? compositions""
+
+"
+"2","
+Attaching package: ‘compositions’
+
+"
+"2","The following object is masked from ‘package:caret’:
+
+    R2
+
+"
+"2","The following object is masked from ‘package:glmnet’:
+
+    rmult
+
+"
+"2","The following object is masked from ‘package:Matrix’:
+
+    norm
+
+"
+"2","The following objects are masked from ‘package:stats’:
+
+    anova, cor, cov, dist, var
+
+"
+"2","The following object is masked from ‘package:graphics’:
+
+    segments
+
+"
+"2","The following objects are masked from ‘package:base’:
+
+    %*%, norm, scale, scale.default
+
+"
+"0","library(knitr)"
+"0","library(ggpubr)"
+"2","
+Attaching package: ‘ggpubr’
+
+"
+"2","The following object is masked from ‘package:plyr’:
+
+    mutate
+
+"
+"2","The following object is masked from ‘package:qiime2R’:
+
+    mean_sd
+
+"
+"0","# library(devtools)"
+"0","# install_github(""vqv/ggbiplot"")"
+"0","# For reproducibility"
+"0","set.seed(123)"
+"0","alpha <- 0.05"

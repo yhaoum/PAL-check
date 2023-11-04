@@ -1,0 +1,5 @@
+"0","a <- seq(min(theta), max(theta), length=n)"
+"0","y <- dtruncnorm(a, 0, 1)"
+"0","yy <- rtruncnorm(n, 0, 1)"
+"0","dat <- data.frame(theta,y,a)"
+"0","hist(theta, prob=T)"

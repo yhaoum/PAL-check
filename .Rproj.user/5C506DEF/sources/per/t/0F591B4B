@@ -1,0 +1,26 @@
+{
+    "id": "0F591B4B",
+    "path": "~/Study/STATS489/generalPanelFit1.R",
+    "project_path": null,
+    "type": "r_source",
+    "hash": "3907573617",
+    "contents": "",
+    "dirty": false,
+    "created": 1698900180870.0,
+    "source_on_save": false,
+    "relative_order": 13,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "20,41",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1681703257,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1681703257,
+    "read_only": false,
+    "read_only_alternatives": []
+}

@@ -1,0 +1,7 @@
+"0","# test error"
+"0","lm.pred_test = predict(lm.mod, data.frame(X_test))"
+"0","mean((y_test - lm.pred_test)^2)"
+"1","[1]"
+"1"," 31.32325"
+"1","
+"

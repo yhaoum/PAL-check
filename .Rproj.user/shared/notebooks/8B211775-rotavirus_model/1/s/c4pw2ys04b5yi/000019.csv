@@ -1,0 +1,8 @@
+"0",""
+"0","load(""~/Study/STATS489/PAL_check/rotavirus/real_rotavirus_metadata.Rdata"")"
+"0","realdat <- data.frame(time = c(1:416), realdat)"
+"0","ggplot(data=realdat) + "
+"0"," geom_line(aes(x=time, y=cases1),color='green') +"
+"0"," geom_line(aes(x=time, y=cases2), color='red') +"
+"0"," geom_line(aes(x=time, y=cases3), color='blue') +"
+"0","  ylab('Y_real')+xlab('date')"
