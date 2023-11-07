@@ -230,8 +230,10 @@ rinit <- Csnippet("
     H3 = 0;
 ")
 
-load("real_rotavirus_metadata.Rdata")
-dat <- data.frame(time = c(1:416), realdat)
+read.table("real_rotavirus_metadata.txt") %>%
+  rbind(data.frame(time=0,cases1=NA,cases2=NA,cases3=NA)) %>%
+  arrange(time) -> dat
+
 # define parameters (without betas)
 params_fixed <- c(gamma=1, delta1=1/(5*52),delta2=1/(55*52), alpha=1/(78.86912*52), 
                   mu=1/(18.86912*52), N=82372825, omega=1/(1*52))

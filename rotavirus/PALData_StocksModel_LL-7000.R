@@ -204,6 +204,10 @@ rinit <- Csnippet("
     H3 = 0;
 ")
 
+read.table("real_rotavirus_metadata.txt") %>%
+  rbind(data.frame(time=0,cases1=NA,cases2=NA,cases3=NA)) %>%
+  arrange(time) -> dat
+
 params_fixed <- c(gamma=1, delta1=1/(5*52),delta2=1/(55*52), alpha=1/(78.86912*52), 
                   mu=1/(18.86912*52), N=82372825, omega=1/(1*52))
 params <- params_fixed
@@ -220,36 +224,12 @@ params["y3"] <- 174
 
 params_stocks_stst_mle <- params
 
-load("~/Study/STATS489/PAL_check/rotavirus/real_rotavirus_metadata.Rdata")
-dat <- data.frame(time = c(1:416), realdat)
-sim1 <- simulate(t0=0,
-                 times=c(1:416),
-                 dmeasure = dmeas,
-                 rmeasure = rmeas,
-                 rprocess = euler(step.fun = sir.step, delta.t = 1/10),
-                 statenames = c("S1", "I1", "R1", "H1", "S2", "I2", "R2", "H2","S3","I3", "R3", "H3"),
-                 obsnames=c("cases1","cases2","cases3"),
-                 paramnames = names(params_stocks_stst_mle),
-                 accumvars=c("H1", "H2", "H3"),
-                 skeleton=vectorfield(Csnippet(sir.skel)),
-                 rinit=rinit,
-                 params = params_stocks_stst_mle
+pt <- pomp::parameter_trans(
+  log = c("beta1","beta2","beta3","sigma","od"),
+  logit=c("beta11"),
+  toEst= pomp::Csnippet("T_phi = logit(phi/(M_2PI));"),
+  fromEst= pomp::Csnippet("phi = M_2PI*expit(T_phi);")
 )
-
-(sim_data <- as.data.frame(sim1))
-ggplot(data=dat) + 
-  geom_line(aes(x=time, y=cases1),color='green') +
-  geom_line(aes(x=time, y=cases2), color='red') +
-  geom_line(aes(x=time, y=cases3), color='blue') +
-  ylab('Y_real')+xlab('date')
-
-ggplot(data=sim_data) + 
-  geom_line(aes(x=time, y=cases1),color='green') +
-  geom_line(aes(x=time, y=cases2), color='red') +
-  geom_line(aes(x=time, y=cases3), color='blue') +
-  ylab('Y_mine')+xlab('date')
-```
-
 
 pomp(data = dat,
      times="time",
@@ -260,6 +240,7 @@ pomp(data = dat,
      statenames = c("S1", "I1", "R1", "H1", "S2", "I2", "R2", "H2","S3","I3", "R3", "H3"),
      paramnames = names(params_stocks_stst_mle),
      accumvars=c("H1", "H2", "H3"),
+     partrans = pt,
      skeleton=vectorfield(Csnippet(sir.skel)),
      rinit=rinit_raw,
      params = params_stocks_stst_mle
@@ -279,3 +260,42 @@ logmeanexp(logLik(pfs),se=TRUE)
 
 
 ### -7021.9882607
+
+
+require(doParallel)
+cores <- 36
+registerDoParallel(cores)
+mcopts <- list(set.seed=TRUE)
+
+
+sir_box <- rbind(
+  beta1=c(10,15),
+  beta2=c(0.2,0.40),
+  beta3=c(0.3,0.5),
+  beta11=c(0.11,0.16),
+  phi=c(0.01,0.3),
+  od=c(0.001,0.3),
+  sigma=c(0.001,0.2)
+)
+
+sobol_design(
+  lower=c(beta1=10,beta2=0.2,beta3=0.3,beta11=0.11,phi=0.01,od=0.001,sigma=0.001),
+  upper=c(beta1=15,beta2=0.4,beta3=0.5,beta11=0.16,phi=0.3,od=0.3,sigma=0.2),
+  nseq=100
+) -> guesses
+
+bake(file = "mif_check_paldata_stocksmodel.rds",{ 
+  mifs_global <- foreach(i=1:cores,.packages='pomp', .options.multicore=mcopts) %dopar% {
+    mif2(
+      sir,
+      start=c(apply(sir_box,1,function(x)runif(1,min=x[1],max=x[2])),sir_fixed_params),
+      Np=2,
+      Nmif=2,
+      cooling.type="geometric",
+      cooling.fraction.50=0.5,
+      transform=TRUE,
+      rw.sd=rw_sd(beta1=0.002,beta2=0.002,beta3=0.002,beta11=0.001,phi=0.01,od=0.01, sigma=0.01)
+    )
+  }
+  mifs_global
+})
