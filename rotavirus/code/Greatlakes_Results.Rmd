@@ -1,0 +1,402 @@
+---
+title: "Greatlakes_results"
+author: "Yize Hao"
+date: "2023-11-04"
+output: html_document
+---
+
+```{r}
+mif_check_01 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif_check_01.rds")
+lik <- c()
+for(i in 1:36){
+  lik[i] <- mif_check_01[[i]]@loglik
+}
+```
+
+```{r}
+mif_check_paldata_stocksmodel_02 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif_check_paldata_stocksmodel_02.rds")
+lik <- c()
+for(i in 1:36){
+  lik[i] <- mif_check_paldata_stocksmodel_02[[i]]@loglik
+}
+
+```
+
+```{r}
+mif_check_paldata_stocksmodel_next_01 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif_check_paldata_stocksmodel_next_01.rds")
+lik <- c()
+for(i in 1:36){
+  lik[i] <- mif_check_paldata_stocksmodel_next_01[[i]]@loglik
+}
+
+panel <- list()
+for(i in 1:36){
+  panel[[i]] <- panelPomp::panelPomp(
+      list(unit1 = mif_check_paldata_stocksmodel_next_01[[i]]),
+      shared = NULL,
+      specific = mif_check_paldata_stocksmodel_next_01[[i]] |> 
+        pomp::coef() |> 
+        as.matrix() |>
+        `colnames<-`("unit1")
+    )
+}
+
+el <- measlespkg::eval_logLik(panel, ncores =2, np_pf = 5,nreps=2)
+el$fits$logLik |> max()
+```
+
+```{r}
+require(doParallel)
+cores <- 36
+registerDoParallel(cores)
+mcopts <- list(set.seed=TRUE)
+
+
+sir_box <- rbind(
+  beta1=c(10,15),
+  beta2=c(0.2,0.40),
+  beta3=c(0.3,0.5),
+  beta11=c(0.11,0.16),
+  phi=c(0.01,0.3),
+  od=c(0.001,0.3),
+  sigma=c(0.001,0.2)
+)
+
+sobol_design(
+  lower=c(beta1=10,beta2=0.2,beta3=0.3,beta11=0.11,phi=0.01,od=0.001,sigma=0.001),
+  upper=c(beta1=15,beta2=0.4,beta3=0.5,beta11=0.16,phi=0.3,od=0.3,sigma=0.2),
+  nseq=100
+) -> guesses
+
+bake(file = "mif_check_paldata_stocksmodel.rds",{ 
+     mifs_global <- foreach(i=1:cores,.packages='pomp', .options.multicore=mcopts) %dopar% {
+  panelPomp::mif2(
+      sir_panel,
+      Np = 2,
+      cooling.fraction.50 = 0.5,
+      rw.sd = rw_sd(beta1=0.002,beta2=0.002,beta3=0.002,
+                    beta11=0.001,phi=0.01,od=0.01, sigma=0.01),
+      cooling.type = "geometric",
+      Nmif = 2,
+      shared.start = numeric(0),
+      specific.start = starting,
+      block = F
+    )
+     }
+    mifs_global
+})
+
+## Make it panelPomp
+c(apply(sir_box,1,function(x)runif(1,min=x[1],max=x[2])),sir_fixed_params) |> 
+  as.matrix() |>
+  `colnames<-`("unit1") -> starting
+
+panelPomp::mif2(
+      sir_panel,
+      Np = 2,
+      cooling.fraction.50 = 0.5,
+      rw.sd = rw_sd(beta1=0.002,beta2=0.002,beta3=0.002,
+                    beta11=0.001,phi=0.01,od=0.01, sigma=0.01),
+      cooling.type = "geometric",
+      Nmif = 2,
+      shared.start = numeric(0),
+      specific.start = starting,
+      block = F
+    ) -> mif_out
+```
+
+
+```{r}
+source("~/Study/STATS489/PAL_check/rotavirus/R/combine_top_fits.R")
+source("~/Study/STATS489/PAL_check/rotavirus/R/duplicate_top_pparams.R")
+source("~/Study/STATS489/PAL_check/rotavirus/R/coef_to_pparams.R")
+source("~/Study/STATS489/PAL_check/rotavirus/R/EL_list.R")
+source("~/Study/STATS489/PAL_check/rotavirus/R/grab_top_fits.R")
+
+```
+
+```{r}
+combine_top_fits(x = el,top_n = 12)
+```
+
+
+#### combine_top_fits
+
+```{r}
+combine_top_fits = function(
+    x = el,
+    top_n = 1,
+    top_n_shared = 1,
+    se_penalty = 0,
+    omit = NULL,
+    is_spat = FALSE
+){
+  unit_names = colnames(x$ull)
+  U = length(unit_names)
+  N = max(top_n, top_n_shared)
+
+  stopifnot(N <= nrow(x$fits))
+
+  score_total = x$fits$logLik - x$fits$se*se_penalty
+  ranking_total = order(score_total, decreasing = TRUE)[1:top_n_shared]
+  best_fits = dplyr::select(
+    x$fits[ranking_total,], -"logLik", -"se"
+  )
+  if(is_spat){
+    expp = spatCoef_to_pparams(best_fits[1,], units = unit_names)
+  } else {
+    expp = coef_to_pparams(best_fits[1,])
+  }
+  shared_names = names(expp$shared)
+  specific_names = setdiff(rownames(expp$specific), omit)
+
+  fits_cols = vector(length = length(unit_names), mode = "list")
+  ull_cols = vector(length = length(unit_names), mode = "list")
+  se_cols = vector(length = length(unit_names), mode = "list")
+  cll = vector(length = length(unit_names), mode = "list")
+  names(cll) = unit_names
+  cll_se = vector(length = length(unit_names), mode = "list")
+  names(cll_se) = unit_names
+
+  for(z in seq_along(unit_names)){
+    un = unit_names[[z]]
+    score = x$ull[[un]] - se_penalty*x$se[[un]]
+    ranking = order(score, decreasing = TRUE)[1:top_n]
+    pn = if(is_spat) paste0(specific_names, z) else paste0(specific_names, "[",un,"]")
+    recycle_vec = sort(rep_len(1:top_n, N))
+    fits_cols[[z]] = x$fits[ranking, pn][recycle_vec,]
+    ull_cols[[z]] = x$ull[ranking, un][recycle_vec,]
+    names(ull_cols)[[z]] = un
+    se_cols[[z]] = x$se[ranking, un][recycle_vec,]
+    names(se_cols)[[z]] = un
+    cll[[unit_names[[z]]]] =
+      x$cll[[unit_names[[z]]]][ranking,, drop = FALSE][recycle_vec,, drop = FALSE]
+    cll_se[[unit_names[[z]]]] =
+      x$cll_se[[unit_names[[z]]]][ranking,, drop = FALSE][recycle_vec,, drop = FALSE]
+  }
+
+  fits = dplyr::bind_cols(fits_cols)
+  ull = dplyr::bind_cols(ull_cols)
+  se = dplyr::bind_cols(se_cols)
+
+  opn = if(is.null(omit)) NULL else paste0(rep(omit, each = U),"[",unit_names,"]")
+  for(param_name in c(shared_names, opn)){
+    fits[[param_name]] =
+      best_fits[sort(rep_len(1:top_n_shared, N)), param_name, drop = TRUE]
+  }
+  fits = fits |>
+    dplyr::mutate(
+      logLik = rowSums(ull)[sort(rep_len(1:top_n, N))],
+      se = sapply(1:nrow(se), function(z)
+        sqrt(sum(se[z,]^2))
+      )[sort(rep_len(1:top_n, N))]
+    )
+
+  new_EL_list(
+    fits = fits[colnames(x$fits)],
+    ull = ull[colnames(x$ull)],
+    se = se[colnames(x$se)],
+    cll = cll[names(x$cll)],
+    cll_se = cll_se[names(x$cll_se)],
+    np_pf = x$np_pf,
+    nreps = x$nreps
+  )
+}
+```
+
+#### grab_top_fits
+
+```{r}
+grab_top_fits = function(
+    x,
+    top_n = 1,
+    se_penalty = 0
+  ){
+  score = x$fits$logLik - se_penalty*x$fits$se
+  ranking = order(score, decreasing = TRUE)
+  new_EL_list(
+    fits = x$fits[ranking,, drop = FALSE][1:top_n,, drop = FALSE],
+    ull = x$ull[ranking,, drop = FALSE][1:top_n,, drop = FALSE],
+    se = x$se[ranking,, drop = FALSE][1:top_n,, drop = FALSE],
+    cll = x$cll |>
+      lapply(function(y) y[ranking,, drop = FALSE][1:top_n,, drop = FALSE]),
+    cll_se = x$cll_se |>
+      lapply(function(y) y[ranking,, drop = FALSE][1:top_n,, drop = FALSE]),
+    np_pf = x$np_pf,
+    nreps = x$nreps
+  )
+}
+```
+
+#### duplicate_top_params
+
+```{r}
+duplicate_top_pparams = function(
+    x, #this is panelpomp object (a EL_list)
+    out_length,
+    top_n = 1,
+    top_n_shared = 1,
+    se_penalty = 0,
+    omit = NULL,
+    combine = FALSE,
+    units = NULL
+){
+  is_spat = !is.null(units)
+  if(ncol(x$ull) == 1 | combine == FALSE){
+    grabbed_params = grab_top_fits(x, top_n = top_n)$fits |>
+      dplyr::select(-"logLik", -"se")
+  } else {
+    grabbed_params = combine_top_fits(
+      x,
+      top_n = top_n,
+      top_n_shared = top_n_shared,
+      se_penalty = se_penalty,
+      omit = omit,
+      is_spat = is_spat
+    )$fits |>
+      dplyr::select(-"logLik", -"se")
+  }
+  top_params = dplyr::slice(
+    grabbed_params,
+    rep_len(1:nrow(grabbed_params), length.out = out_length)
+  )
+  lapply(1:nrow(top_params), function(z){
+    if(!is_spat)
+      coef_to_pparams(top_params[z,])
+  }) -> duplicate_top
+}
+```
+
+#### *Use this* Plug top n fits parameters into initial parameters
+
+```{r}
+PREVIOUS_FIT_PATH = "~/Study/STATS489/PAL_check/rotavirus/mif_check_paldata_stocksmodel_next_01.rds"
+# Get starting parameters from previous fit
+if(!is.null(PREVIOUS_FIT_PATH)){
+  fit_results_in = readRDS(PREVIOUS_FIT_PATH)
+  if(class(fit_results_in$EL_out) != "EL_list"){
+    EL_in = fit_results_in$EL_out[[length(fit_results_in$EL_out)]]
+  } else {
+    
+    EL_in = fit_results_in$EL_out
+  }
+  initial_pparams_list = duplicate_top_pparams(
+    EL_in,
+    out_length = NREPS_FITR,
+    top_n = TOP_N_FITS,
+    combine = FALSE,
+    units = NULL
+  )
+}
+
+```
+
+##### Use this---Next-round Code
+
+```{r}
+mif2_panel_Yize <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize.rds")
+el <- measlespkg::eval_logLik(mif2_panel_Yize, ncores = cores, np_pf = NP_MIF, nreps=cores)
+x <- na.omit(el$fits)
+score_total = x$logLik
+ranking_total = order(score_total, decreasing = TRUE)[1:top_n_fits]
+
+best_fits = dplyr::select(
+  x[ranking_total,], -"logLik", -"se"
+  )
+ 
+recycle_vec = sort(rep_len(1:top_n_fits, cores))
+full_best_fit <- best_fits[recycle_vec, ] 
+  
+coef_names <- colnames(full_best_fit)
+colnames(full_best_fit) <- gsub(".{7}$","",coef_names)
+
+starting_values <- vector(cores, mode="list")
+
+for(i in 1:cores){
+  t(full_best_fit[i, ])  |> 
+  as.matrix() |>
+  `colnames<-`("unit1") -> starting_values[[i]] 
+}
+
+bake(file = "mif2_panel_Yize_01.rds",{ 
+  mifs_global <- foreach(i=1:cores,.packages='pomp', .options.multicore=mcopts) %dopar% {
+    panelPomp::mif2(
+      sir_panel,
+      Np = NP_MIF,
+      cooling.fraction.50 = 0.5,
+      rw.sd = rw_sd(beta1=0.002,beta2=0.002,beta3=0.002,
+                    beta11=0.001,phi=0.01,od=0.01, sigma=0.01),
+      cooling.type = "geometric",
+      Nmif = NMIF,
+      shared.start = numeric(0),
+      specific.start = starting_values[[i]],
+      block = F
+    ) 
+  }
+  mifs_global
+})
+```
+
+```{r}
+mif2_panel_Yize_01 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_01.rds")
+
+mif2_panel_Yize_round_dummy <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_round_dummy.rds")
+```
+
+#### round-01
+
+```{r}
+rm(list = ls())     # clear objects  
+graphics.off()      # close graphics windows
+# close graphics windows
+library(pomp)
+library(magrittr)
+library(plyr)
+library(reshape2)
+library(ggplot2)
+library(scales)
+library(foreach)
+library(doParallel)
+
+mif2_panel_Yize_round_01 <- readRDS("/mif2_panel_Yize_round_01.rds")
+
+require(doParallel)
+cores <- 36
+registerDoParallel(cores)
+mcopts <- list(set.seed=TRUE)
+
+bake(file = "output/stocks_04(panel_continue)/mif2_panel_Yize_round_01_loglik.rds",{ 
+  el <- foreach(i=1:cores,.packages='pomp', .options.multicore=mcopts) %dopar% {
+    measlespkg::eval_logLik(mif2_panel_Yize_round_01, ncores =cores, np_pf = 10000,nreps=cores)
+  }
+  el
+})
+```
+
+#### el output - dummy
+
+```{r}
+mif2_panel_Yize_el_01_dummy <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_01_dummy.rds")
+```
+
+#### el-round-01
+
+```{r}
+mif2_panel_Yize_el_01 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_01.rds")
+
+mif2_panel_Yize_el_01$fits$logLik |> max()
+
+mif2_panel_Yize_el_01$fits$logLik |> max() * (-2) + 14
+```
+
+##### Round-02
+
+```{r}
+mif2_panel_Yize_el_02_check <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_02_check.rds")
+
+mif2_panel_Yize_el_02 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_02.rds")
+
+mif2_panel_Yize_el_02$fits$logLik |> max()
+
+mif2_panel_Yize_el_02$fits$logLik |> max() * (-2) + 14
+```

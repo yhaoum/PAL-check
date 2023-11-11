@@ -1,8 +1,0 @@
-"0","theta_remain <- theta[2001:100000]"
-"0","a <- seq(min(theta_remain), max(theta_remain), length=80000)"
-"0","y <- dt(a, df=3)"
-"0","yy <- rt(n,df=3)"
-"0","dat <- data.frame(theta_remain,y,a)"
-"2","Error in data.frame(theta_remain, y, a) : 
-  arguments imply differing number of rows: 98000, 80000
-"

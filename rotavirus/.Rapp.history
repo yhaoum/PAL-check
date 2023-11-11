@@ -1,1 +1,2 @@
 load("/Users/yizehao/Study/STATS 489/PAL check/rotavuris/sign_ascent_equidispersedNA.Rdata")
+load("/Users/yizehao/Study/STATS489/PAL_check/rotavirus/mif_check_01.rds")
