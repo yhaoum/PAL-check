@@ -12,9 +12,9 @@ library(doParallel)
 registerDoParallel()
 stopifnot(packageVersion("pomp") >= "1.7")
 
-RUN_LEVEL = 2
-NP_MIF       = switch(RUN_LEVEL, 4, 5000)
-NMIF         = switch(RUN_LEVEL, 4,  100)
+RUN_LEVEL = 1
+NP_MIF       = switch(RUN_LEVEL, 2, 5000)
+NMIF         = switch(RUN_LEVEL, 2,  100)
 
 # measurement model 
 # measurement model 
@@ -22,31 +22,18 @@ dmeas <- Csnippet("
                   if (ISNA(cases1)) {
                   lik = (give_log) ? 0 : 1;
                   } else {
-                      if(t < 209){
-                        lik =  dnbinom_mu(cases1, 1/od, 0.06205271*H1, 1) +
-                        dnbinom_mu(cases2, 1/od, 0.06762432*H2, 1) +
-                        dnbinom_mu(cases3, 1/od, 0.06988662*H3, 1);
-                      }
-                      else{
-                        lik =  dnbinom_mu(cases1, 1/od, 0.08791755*H1, 1) +
-                        dnbinom_mu(cases2, 1/od, 0.09408622*H2, 1) +
-                        dnbinom_mu(cases3, 1/od, 0.09649926*H3, 1);
-                      }
-                    
+                        lik =  dnbinom_mu(cases1, 1/od, q1*H1, 1) +
+                        dnbinom_mu(cases2, 1/od, q2*H2, 1) +
+                        dnbinom_mu(cases3, 1/od, q3*H3, 1);
+                      
                     lik = (give_log) ? lik : exp(lik);
                         
                     }")
 rmeas <-  Csnippet("
-                  if(t < 209){
-                   cases1 = rnbinom_mu(1/od,0.06205271*H1);
-                   cases2 = rnbinom_mu(1/od,0.06762432*H2);
-                   cases3 = rnbinom_mu(1/od,0.06988662*H3);
-                  }
-                  else{
-                    cases1 = rnbinom_mu(1/od,0.08791755*H1);
-                    cases2 = rnbinom_mu(1/od,0.09408622*H2);
-                    cases3 = rnbinom_mu(1/od,0.09649926*H3);
-                  }
+                    cases1 = rnbinom_mu(1/od,q1*H1);
+                    cases2 = rnbinom_mu(1/od,q2*H2);
+                    cases3 = rnbinom_mu(1/od,q3*H3);
+                  
                   ")
 
 
@@ -230,7 +217,7 @@ rinit <- Csnippet("
     H3 = 0;
 ")
 
-read.table("real_rotavirus_metadata.txt") %>%
+read.table("~/Study/STATS489/PAL_check/rotavirus/data/real_rotavirus_metadata.txt") %>%
   rbind(data.frame(time=0,cases1=NA,cases2=NA,cases3=NA)) %>%
   arrange(time) -> dat
 
@@ -248,12 +235,15 @@ params["sigma"] <- 0.091
 params["y1"] <- 2882
 params["y2"] <- 628
 params["y3"] <- 174
+params["q1"] <- 0.08
+params["q2"] <- 0.08
+params["q3"] <- 0.08
 
 sir_fixed_params <- c(params_fixed, params["y1"], params["y2"], params["y3"])
 
 pt <- pomp::parameter_trans(
   log = c("beta1","beta2","beta3","sigma","od"),
-  logit=c("beta11"),
+  logit=c("beta11","q1","q2","q3"),
   toEst= pomp::Csnippet("T_phi = logit(phi/(M_2PI));"),
   fromEst= pomp::Csnippet("phi = M_2PI*expit(T_phi);")
 )
@@ -294,35 +284,39 @@ sir_box <- rbind(
   beta11=c(0.11,0.16),
   phi=c(0.01,0.3),
   od=c(0.001,0.3),
-  sigma=c(0.001,0.2)
+  sigma=c(0.001,0.2),
+  q1=c(0.03,0.15),
+  q2=c(0.03,0.15),
+  q3=c(0.03,0.15)
 )
-
-sobol_design(
-  lower=c(beta1=10,beta2=0.2,beta3=0.3,beta11=0.11,phi=0.01,od=0.001,sigma=0.001),
-  upper=c(beta1=15,beta2=0.4,beta3=0.5,beta11=0.16,phi=0.3,od=0.3,sigma=0.2),
-  nseq=100
-) -> guesses
 
 ## Make it panelPomp
 c(apply(sir_box,1,function(x)runif(1,min=x[1],max=x[2])),sir_fixed_params) |> 
   as.matrix() |>
   `colnames<-`("unit1") -> starting
 
-bake(file = "mif2_panel_Yize.rds",{ 
-  mifs_global <- foreach(i=1:cores,.packages='pomp', .options.multicore=mcopts) %dopar% {
-    panelPomp::mif2(
-      sir_panel,
-      Np = NP_MIF,
-      cooling.fraction.50 = 0.5,
-      rw.sd = rw_sd(beta1=0.002,beta2=0.002,beta3=0.002,
-                    beta11=0.001,phi=0.01,od=0.01, sigma=0.01),
-      cooling.type = "geometric",
-      Nmif = NMIF,
-      shared.start = numeric(0),
-      specific.start = starting,
-      block = F
-    ) 
-  }
+mifs_global <- foreach(i=1:cores,.packages='pomp', .options.multicore=mcopts) %dopar% {
+  panelPomp::mif2(
+    sir_panel,
+    Np = NP_MIF,
+    cooling.fraction.50 = 0.5,
+    rw.sd = rw_sd(beta1=0.002,beta2=0.002,beta3=0.002,
+                  beta11=0.001,phi=0.01,od=0.01, sigma=0.01,
+                  q1=0.001,q2=0.001,q3=0.001),
+    cooling.type = "geometric",
+    Nmif = NMIF,
+    shared.start = numeric(0),
+    specific.start = starting,
+    block = F
+  ) 
+}
+
+bake(file = "mif2_panel_Yize_report_nb_01.rds",{ 
   mifs_global
+})
+
+bake(file = "mif2_panel_Yize_el_report_nb_01.rds",{
+  el <- measlespkg::eval_logLik(mifs_global, ncores =cores, np_pf = NP_MIF, nreps=cores)
+  el
 })
 

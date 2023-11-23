@@ -400,3 +400,91 @@ mif2_panel_Yize_el_02$fits$logLik |> max()
 
 mif2_panel_Yize_el_02$fits$logLik |> max() * (-2) + 14
 ```
+
+#### With reporting rate -------- 13815.98
+
+```{r}
+mif2_panel_Yize_el_report_nb_01_dummy <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_nb_01_dummy.rds")
+
+mif2_panel_Yize_el_report_nb_01 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_nb_01.rds")
+
+mif2_panel_Yize_el_report_nb_01$fits$logLik |> max()
+
+mif2_panel_Yize_el_report_nb_01$fits$logLik |> which.max()
+
+mif2_panel_Yize_el_report_nb_01$fits[23, ]
+
+mif2_panel_Yize_el_report_nb_01$fits$logLik |> max() * (-2) + 20
+
+mif2_panel_Yize_el_report_nb_02 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_nb_02.rds")
+
+mif2_panel_Yize_el_report_nb_02$fits$logLik |> max()
+
+mif2_panel_Yize_el_report_nb_02$fits$logLik |> max() * (-2) + 20
+
+mif2_panel_Yize_el_report_nb_02$fits$logLik |> which.max()
+```
+
+
+#### Binom dmeas
+
+```{r}
+mif2_panel_Yize_el_report_binom_dummy <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_binom_dummy.rds")
+
+mif2_panel_Yize_el_report_binom_dummy$fits$logLik |> max()
+
+mif2_panel_Yize_el_report_binom_01 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_binom_01.rds")
+
+mif2_panel_Yize_el_report_binom_01$fits$logLik |> max()
+
+`mif2_panel_Yize_el_report_binom_dummy (1)` <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_binom_dummy (1).rds")
+
+mif2_panel_Yize_el_report_binom_02 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_binom_02.rds")
+
+mif2_panel_Yize_el_report_binom_02$fits$logLik |> max()
+
+mif2_panel_Yize_el_report_binom_03 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_binom_03.rds")
+
+mif2_panel_Yize_el_report_binom_03$fits$logLik |> max()
+```
+
+
+### Unknown Repoting
+
+```{r}
+mif2_panel_Yize_el_report_binom_unknown_reporting_dummy <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_binom_dummy (2).rds")
+
+mif2_panel_Yize_el_report_binom_unknown_reporting_dummy$fits$logLik |> max()
+
+mif2_panel_Yize_el_report_binom_unknown_reporting_01 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_binom_unknown_reporting_01.rds")
+
+mif2_panel_Yize_el_report_binom_dummy_round_02_dummy <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_binom_dummy (3).rds")
+
+mif2_panel_Yize_el_report_binom_unknown_reporting_02 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_report_binom_02 (1).rds")
+```
+
+
+#### More randomness of Stocks' --------- 13815.23
+
+```{r}
+mif2_panel_Yize_el_01 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_01.rds")
+
+mif2_panel_Yize_el_01$fits$logLik |> na.omit() |> max()
+
+mif2_panel_Yize_el_01$fits$logLik |> na.omit() |> max() * (-2) + 22
+
+mif2_panel_Yize_el_01$fits$logLik |> na.omit() |> order()
+
+
+mif2_panel_Yize_el_02_dummy <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_02_dummy.rds")
+
+
+mif2_panel_Yize_el_02 <- readRDS("~/Study/STATS489/PAL_check/rotavirus/mif2_panel_Yize_el_02.rds")
+
+mif2_panel_Yize_el_02$fits$logLik |> max()
+mif2_panel_Yize_el_02$fits$logLik |> which.max() -> ind
+mif2_panel_Yize_el_02$fits$logLik |> order(decreasing = T)
+mif2_panel_Yize_el_02$fits[5, ] |> t() -> pal_mle
+pal_mle[c(1:12), ]
+mif2_panel_Yize_el_02$fits$logLik |> max() * (-2) + 20
+```
