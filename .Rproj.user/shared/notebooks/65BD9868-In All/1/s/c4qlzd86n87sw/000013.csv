@@ -1,5 +1,0 @@
-"0",""
-"0","#ICS"
-"0","plot_richness(GP, x = ""Patient_Type"") +"
-"0","  geom_boxplot(alpha=0.6)+ "
-"0","  theme(legend.position=""none"", axis.text.x=element_text(angle=45,hjust=1,vjust=1,size=6))"

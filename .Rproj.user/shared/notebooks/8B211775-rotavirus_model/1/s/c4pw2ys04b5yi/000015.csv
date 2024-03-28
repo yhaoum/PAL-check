@@ -1,6 +1,0 @@
-"0",""
-"0","ggplot(data=sim_data) + "
-"0"," geom_line(aes(x=time, y=S_1),color='green') +"
-"0"," geom_line(aes(x=time, y=I_1), color='red') +"
-"0"," geom_line(aes(x=time, y=R_1), color='blue') +"
-"0","  ylab('X')+xlab('date')"
