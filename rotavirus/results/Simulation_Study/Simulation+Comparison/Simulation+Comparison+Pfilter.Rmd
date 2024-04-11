@@ -414,6 +414,8 @@ sim1 <- simulate(t0=0,
                  )
 sim_data <- as.data.frame(sim1)
 
+save(sim_data, file="~/Study/STATS 489/PAL-check/rotavirus/results/Simulation_Study/sim_data_eqeq.Rdata")
+
 p_EqEq_pomp <- ggplot(data=sim_data) + 
   geom_line(aes(x=time, y=cases1),color='green') +
   geom_line(aes(x=time, y=cases2), color='red') +
@@ -427,7 +429,7 @@ dev.off()
 ```
 
 
-#### *WWR* rinit + dt=1/4 + *WWR* rproc + OvOv
+#### *WWR* rinit + dt=1/4 + *WWR* rproc + EqOv
 
 ```{r}
 # measurement model 
@@ -456,9 +458,8 @@ rproc <- Csnippet("
     
     double prob_S1[3],prob_I1[3],prob_R1[3],prob_S2[3],prob_I2[3],prob_R2[3],prob_S3[2],prob_I3[2],prob_R3[2];
     
-    double xi = rgamma(sigma_xi, 1/sigma_xi);
     
-    double kappa = (1 + beta11*cos(2*3.141593*t/52 + phi)) * xi;
+    double kappa = (1 + beta11*cos(2*3.141593*t/52 + phi));
     
     // Define rate
     prob_S1[0] = 1-exp(-dt*beta1*kappa*I/N); // 0->1
@@ -575,14 +576,12 @@ rinit <- Csnippet("
 # Set to MLE
 params_stocks_stst_mle <- params_fixed
 
-params_stocks_stst_mle["beta1"] <- 11.48
-params_stocks_stst_mle["beta2"] <- 0.25
-params_stocks_stst_mle["beta3"] <- 0.35
+params_stocks_stst_mle["beta1"] <- 12.74
+params_stocks_stst_mle["beta2"] <- 0.21
+params_stocks_stst_mle["beta3"] <- 0.31
 params_stocks_stst_mle["phi"] <- 0.14
-params_stocks_stst_mle["beta11"] <- 0.16
-params_stocks_stst_mle["sigma_q"] <- 0.021
-params_stocks_stst_mle["sigma_xi"] <- 66.89
-
+params_stocks_stst_mle["beta11"] <- 0.19
+params_stocks_stst_mle["sigma_q"] <- 0.042
 
 avg_1 <- c()
 med_1 <- c()
@@ -628,18 +627,18 @@ for(i in 1:1000){
 sim_compare_pomp <- data.frame(avg_1,avg_2,avg_3,
                                med_1,med_2,med_3,
                                var_1,var_2,var_3)
-write.csv(sim_compare_pomp, file = "sim_compare_pomp.csv")
+write.csv(sim_compare_pomp, file = "sim_compare_pomp_EqOv.csv")
 ```
 
-#### Compare - OvOv
+#### Compare - EqOv
 
 ```{r}
-sim_compare <- read.csv("sim_compare_WWR.csv", header = T)
-sim_compare_pomp <- read.csv("sim_compare_pomp.csv", header = T)
+sim_compare <- read.csv("sim_compare_WWR_EqOv.csv", header = T)
+sim_compare_pomp <- read.csv("sim_compare_pomp_EqOv.csv", header = T)
 ```
 
 ```{r}
-c(t.test(sim_compare$avg_1, sim_compare_pomp$avg_1)$p.value,
+(t.pvalue <- round(c(t.test(sim_compare$avg_1, sim_compare_pomp$avg_1)$p.value,
   t.test(sim_compare$avg_2, sim_compare_pomp$avg_2)$p.value,
   t.test(sim_compare$avg_3, sim_compare_pomp$avg_3)$p.value,
   t.test(sim_compare$med_1, sim_compare_pomp$med_1)$p.value,
@@ -647,55 +646,33 @@ c(t.test(sim_compare$avg_1, sim_compare_pomp$avg_1)$p.value,
   t.test(sim_compare$med_3, sim_compare_pomp$med_3)$p.value,
   t.test(sim_compare$var_1, sim_compare_pomp$var_1)$p.value,
   t.test(sim_compare$var_2, sim_compare_pomp$var_2)$p.value,
-  t.test(sim_compare$var_3, sim_compare_pomp$var_3)$p.value)
+  t.test(sim_compare$var_3, sim_compare_pomp$var_3)$p.value), digits=3))
 ```
 
 ```{r}
-x <- data.frame(wwr=sim_compare$avg_1,pomp=sim_compare_pomp$avg_1)
-data<- melt(x)
-p_avg_1 <- ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.25)+ labs(x = "Mean Group 1 - OvOv") + ggtitle("p = 0.35953896")
+labx <- c("Mean Group 1 - EqOv","Mean Group 2 - EqOv","Mean Group 3 - EqOv",
+  "Median Group 1 - EqOv","Median Group 2 - EqOv","Median Group 3 - EqOv",
+  "Variance Group 1 - EqOv","Variance Group 2 - EqOv","Variance Group 3 - EqOv")
+p.comparison <- list()
+for(i in 1:9){
+  x <- data.frame(wwr=sim_compare[,i+1],pomp=sim_compare_pomp[,i+1])
+  data <- melt(x)
+  p.comparison[[i]] <- ggplot(data,aes(x=value, fill=.L1)) +     
+    geom_density(alpha=0.25)+ labs(x = labx[i]) +
+    ggtitle(paste("p = ", t.pvalue[i]))
+}
 
-x <- data.frame(wwr=sim_compare$avg_2,pomp=sim_compare_pomp$avg_2)
-data<- melt(x)
-p_avg_2 <- ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.25)+ labs(x = "Mean Group 2 - OvOv") + ggtitle("p = 0.36216770")
-
-x <- data.frame(wwr=sim_compare$avg_3,pomp=sim_compare_pomp$avg_3)
-data<- melt(x)
-p_avg_3 <- ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.25)+ labs(x = "Mean Group 3 - OvOv") + ggtitle("p = 0.77373969")
-
-x <- data.frame(wwr=sim_compare$med_1,pomp=sim_compare_pomp$med_1)
-data<- melt(x)
-p_med_1 <- ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.25)+ labs(x = "Median Group 1 - OvOv") + ggtitle("p = 0.07522447")
-
-x <- data.frame(wwr=sim_compare$med_2,pomp=sim_compare_pomp$med_2)
-data<- melt(x)
-p_med_2 <- ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.25)+ labs(x = "Median Group 2 - OvOv") + ggtitle("p = 0.38945299")
-
-x <- data.frame(wwr=sim_compare$med_3,pomp=sim_compare_pomp$med_3)
-data<- melt(x)
-p_med_3 <- ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.25)+ labs(x = "Median Group 3 - OvOv") + ggtitle("p = 0.10523030")
-
-x <- data.frame(wwr=sim_compare$var_1,pomp=sim_compare_pomp$var_1)
-data<- melt(x)
-p_var_1 <- ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.25)+ labs(x = "Varience Group 1 - OvOv") + ggtitle("p = 0.58054332")
-
-x <- data.frame(wwr=sim_compare$var_2,pomp=sim_compare_pomp$var_2)
-data<- melt(x)
-p_var_2 <- ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.25)+ labs(x = "Varience Group 2 - OvOv") + ggtitle("p = 0.92505732")
-
-x <- data.frame(wwr=sim_compare$var_3,pomp=sim_compare_pomp$var_3)
-data<- melt(x)
-p_var_3 <- ggplot(data,aes(x=value, fill=variable)) + geom_density(alpha=0.25) + labs(x = "Varience Group 3 - OvOv") + ggtitle("p = 0.68643987")
-
-pdf("compare_density_plot_OvOv.pdf",width=10,height=10)
-plot <- ggarrange(p_avg_1,p_avg_2,p_avg_3,
-          p_med_1,p_med_2,p_med_3,
-          p_var_1,p_var_2,p_var_3, nrow=3, ncol=3)
-annotate_figure(plot, top = text_grob("OvOv model: T-test with 1000 Simulations", color = "black", face = "bold", size = 14))
+pdf("compare_density_plot_EqOv.pdf",width=10,height=10)
+plot <- ggarrange(p.comparison[[1]],p.comparison[[2]],p.comparison[[3]],
+          p.comparison[[4]],p.comparison[[5]],p.comparison[[6]],
+          p.comparison[[7]],p.comparison[[8]],p.comparison[[9]], 
+          nrow=3, ncol=3)
+annotate_figure(plot, top = text_grob("EqOv model: T-test with 1000 Simulations", color = "black", face = "bold", size = 14))
 dev.off()
 ```
 
-#### Two random Simulation Plots + OvOv
+
+#### Two random Simulation Plots + EqOv
 
 ```{r}
 # measurement model 
@@ -725,9 +702,7 @@ rproc <- Csnippet("
     
     double prob_S1[3],prob_I1[3],prob_R1[3],prob_S2[3],prob_I2[3],prob_R2[3],prob_S3[2],prob_I3[2],prob_R3[2];
     
-    double xi = rgamma(sigma_xi, 1/sigma_xi);
-    
-    double kappa = (1 + beta11*cos(2*3.141593*t/52 + phi)) * xi;
+    double kappa = (1 + beta11*cos(2*3.141593*t/52 + phi));
     
     // Define rate
     prob_S1[0] = 1-exp(-dt*beta1*kappa*I/N); // 0->1
@@ -844,13 +819,12 @@ rinit <- Csnippet("
 # Set to MLE
 params_stocks_stst_mle <- params_fixed
 
-params_stocks_stst_mle["beta1"] <- 11.48
-params_stocks_stst_mle["beta2"] <- 0.25
-params_stocks_stst_mle["beta3"] <- 0.35
+params_stocks_stst_mle["beta1"] <- 12.74
+params_stocks_stst_mle["beta2"] <- 0.21
+params_stocks_stst_mle["beta3"] <- 0.31
 params_stocks_stst_mle["phi"] <- 0.14
-params_stocks_stst_mle["beta11"] <- 0.16
-params_stocks_stst_mle["sigma_q"] <- 0.021
-params_stocks_stst_mle["sigma_xi"] <- 66.89
+params_stocks_stst_mle["beta11"] <- 0.19
+params_stocks_stst_mle["sigma_q"] <- 0.042
 
 
 set.seed(1928475)
@@ -873,17 +847,19 @@ sim1 <- simulate(t0=0,
 
 sim_data <- as.data.frame(sim1)
 
-p_OvOv_pomp <- ggplot(data=sim_data) + 
+p_EqOv_pomp <- ggplot(data=sim_data) + 
   geom_line(aes(x=time, y=cases1),color='green') +
   geom_line(aes(x=time, y=cases2), color='red') +
   geom_line(aes(x=time, y=cases3), color='blue') +
   ylab('Y_sim_pomp')+xlab('date')
 
-pdf("two_random_simplots_OvOv.pdf", height=5,width=10)
-plot <- ggarrange(p_OvOv_pomp, p_OvOv_WWR, nrow=1)
-annotate_figure(plot, top = text_grob("Two random simulations from OvOv pomp & OvOv WWR", color = "black", face = "bold", size = 20))
+pdf("two_random_simplots_EqOv.pdf", height=5,width=10)
+plot <- ggarrange(p_EqOv_pomp, p_EqOv_WWR, nrow=1)
+annotate_figure(plot, top = text_grob("Two random simulations from EqOv pomp & EqOv WWR", color = "black", face = "bold", size = 20))
 dev.off()
 ```
+
+##### Pfilter
 
 #### Pfilter + EqEq + old
 
@@ -1026,7 +1002,7 @@ params_stocks_stst_mle["beta11"] <- 0.022
 ```{r}
 library(doParallel)
 library(future)
-load("data/real_rotavirus_metadata.Rdata")
+load("~/Study/STATS 489/PAL-check/rotavirus/results/Simulation_Study/real_rotavirus_metadata.Rdata")
 dat <- data.frame(time=c(1:416), realdat)
 
 dat |>

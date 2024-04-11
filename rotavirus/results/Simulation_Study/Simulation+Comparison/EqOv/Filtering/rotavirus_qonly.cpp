@@ -5,6 +5,8 @@
 #include <math.h>
 #define RCPPDIST_DONT_USE_ARMA
 #include <RcppDist.h>
+#include <algorithm> // Include this for std::max
+
 // [[Rcpp::depends(RcppDist)]]
 using namespace Rcpp;
 using namespace arma;
@@ -24,7 +26,7 @@ void update_K(mat& K,
   mat B(3,3, fill::zeros);
   for(int i = 0; i<3;i++){
     for(int j = 0; j<3;j++){
-      B(i,j) = xi*betas(i); 
+      B(i,j) = betas(i); 
     }
   }
   //if(t==0){cout << B(0,0) << endl;}
@@ -87,7 +89,7 @@ void compute_PAL(arma::cube& q,
     mat transitions(9,9, fill::zeros);
     for(int k = 0; k<4; k++){
       
-      update_K(K, lambdabarresamp.row(i).t(), params, xi(i,t), N,t, params(3), params(4));
+      update_K(K, lambdabarresamp.row(i).t(), params, 1, N,t, params(3), params(4));
       
       
       transitions = (lambdabarresamp.row(i).t()*ones.t()) %K;
@@ -102,13 +104,13 @@ void compute_PAL(arma::cube& q,
       mu(2) += transitions(6,7);
       
     }
-   
+    
     // Calculate proposale params
     double mu1 = (0.5)*((norm_pars(0) -   mu(0)*norm_pars(1)*norm_pars(1)) + sqrt((mu(0)*norm_pars(1)*norm_pars(1) - norm_pars(0))*(mu(0)*norm_pars(1)*norm_pars(1) - norm_pars(0)) + 4*y(t,0)*norm_pars(1)*norm_pars(1)));
     double mu2 = (0.5)*((norm_pars(0) -   mu(1)*norm_pars(1)*norm_pars(1)) + sqrt((mu(1)*norm_pars(1)*norm_pars(1) - norm_pars(0))*(mu(1)*norm_pars(1)*norm_pars(1) - norm_pars(0)) + 4*y(t,1)*norm_pars(1)*norm_pars(1)));
     double mu3 = (0.5)*((norm_pars(0) -   mu(2)*norm_pars(1)*norm_pars(1)) + sqrt((mu(2)*norm_pars(1)*norm_pars(1) - norm_pars(0))*(mu(2)*norm_pars(1)*norm_pars(1) - norm_pars(0)) + 4*y(t,2)*norm_pars(1)*norm_pars(1)));;
     
-
+    
     
     double prop1 = sqrt(1/(y(t,0)/(mu1*mu1) + 1/(norm_pars(1)*norm_pars(1))));
     double prop2 = sqrt(1/(y(t,1)/(mu2*mu2) + 1/(norm_pars(1)*norm_pars(1))));
@@ -129,15 +131,113 @@ void compute_PAL(arma::cube& q,
     lambdabar.row(i) = sum(transup,0);
     lambdabar(i,0) += 4*1025.7;
     
-    // lweights(i) = R::dpois(y(t,0), mu(0)*q(i,0,t) ,1) + R::dpois(y(t,1), mu(1)*q(i,1,t) ,1) + R::dpois( y(t,2),mu(2)*q(i,2,t) ,1) + R::dgamma(xi(i,t), gamma_pars(0),gamma_pars(1),1) - R::dgamma(xi(i,t), gammaprop(i,0),gammaprop(i,1),1)  + R::dbeta(q(i,0,t), beta_pars(0),beta_pars(1),1)+ R::dbeta(q(i,1,t),beta_pars(0),beta_pars(1),1)+ R::dbeta(q(i,2,t),beta_pars(0),beta_pars(1),1) - R::dbeta(q(i,0,t),betaprop(i,0),betaprop(i,1),1)- R::dbeta(q(i,1,t),betaprop(i,2),betaprop(i,3),1)- R::dbeta(q(i,2,t),betaprop(i,4),betaprop(i,5),1);
     
-    // lweights(i) = R::dpois(y(t,0), mu(0)*q(i,0,t) ,1) + R::dpois(y(t,1), mu(1)*q(i,1,t) ,1) + R::dpois( y(t,2),mu(2)*q(i,2,t) ,1)  + R::dbeta(q(i,0,t), beta_pars(0),beta_pars(1),1)+ R::dbeta(q(i,1,t),beta_pars(0),beta_pars(1),1)+ R::dbeta(q(i,2,t),beta_pars(0),beta_pars(1),1) - R::dbeta(q(i,0,t),bedfgtaprop(i,0),betaprop(i,1),1)- R::dbeta(q(i,1,t),betaprop(i,2),betaprop(i,3),1)- R::dbeta(q(i,2,t),betaprop(i,4),betaprop(i,5),1);
+    double lambda_0 = std::max(mu(0) * q(i, 0, t), 1e-10);
+    double lambda_1 = std::max(mu(1) * q(i, 1, t), 1e-10);
+    double lambda_2 = std::max(mu(2) * q(i, 2, t), 1e-10);
+    q(i, 0, t) = std::max(q(i, 0, t), 1e-10);
+    q(i, 0, t) = std::min(q(i, 0, t), 1- 1e-10);
+    q(i, 1, t) = std::max(q(i, 1, t), 1e-10);
+    q(i, 1, t) = std::min(q(i, 1, t), 1- 1e-10);
+    q(i, 2, t) = std::max(q(i, 2, t), 1e-10);
+    q(i, 2, t) = std::min(q(i, 2, t), 1- 1e-10);
     
-    lweights(i) = R::dpois(y(t,0), mu(0)*q(i,0,t) ,1) + R::dpois(y(t,1), mu(1)*q(i,1,t) ,1) + R::dpois( y(t,2),mu(2)*q(i,2,t) ,1)+ d_truncnorm(q(i,0,t),norm_pars(0),norm_pars(1),0,1,1) + d_truncnorm(q(i,1,t),norm_pars(0),norm_pars(1),0,1,1)+ d_truncnorm(q(i,2,t),norm_pars(0),norm_pars(1),0,1,1) - d_truncnorm(q(i,0,t),mu1,prop1,0,1,1)- d_truncnorm(q(i,1,t),mu2,prop2,0,1,1) - d_truncnorm(q(i,2,t),mu3,prop3,0,1,1);  
+    lweights(i) = R::dpois(y(t,0), lambda_0 ,1) + R::dpois(y(t,1), lambda_1 ,1) + R::dpois( y(t,2),lambda_2 ,1)+ d_truncnorm(q(i,0,t),norm_pars(0),norm_pars(1),0,1,1) + d_truncnorm(q(i,1,t),norm_pars(0),norm_pars(1),0,1,1)+ d_truncnorm(q(i,2,t),norm_pars(0),norm_pars(1),0,1,1) - d_truncnorm(q(i,0,t),mu1,prop1,0,1,1)- d_truncnorm(q(i,1,t),mu2,prop2,0,1,1) - d_truncnorm(q(i,2,t),mu3,prop3,0,1,1);  
   }
   
   
 }
+
+
+
+void compute_PAL_prior(arma::cube& q,
+                 vec norm_pars,
+                 arma::mat xi,
+                 mat gammaprop,
+                 vec gamma_pars,
+                 mat& lambdabar,
+                 mat prop,
+                 arma::mat lambdabarresamp,
+                 arma::vec params,
+                 arma::mat K,
+                 vec& lweights,
+                 mat y,
+                 int m,
+                 int t,
+                 int n_parts,
+                 int N
+){
+  
+  mat lambda_particles(n_parts,m);
+  vec ones(9, fill::ones);
+  for(int i = 0; i< n_parts; i++){
+    vec mu(3, fill::zeros);
+    mat transitions(9,9, fill::zeros);
+    for(int k = 0; k<4; k++){
+      
+      update_K(K, lambdabarresamp.row(i).t(), params, 1, N,t, params(3), params(4));
+      
+      
+      transitions = (lambdabarresamp.row(i).t()*ones.t()) %K;
+      
+      // if(t==0&&i==3){cout << ones*lambdabarresamp.row(i) << endl;}
+      
+      
+      lambdabarresamp.row(i) = sum(transitions,0);
+      lambdabarresamp(i,0) += 4*1025.7;
+      mu(0) += transitions(0,1);
+      mu(1) += transitions(3,4);
+      mu(2) += transitions(6,7);
+      
+    }
+    
+    // Calculate proposale params
+    double mu1 = (0.5)*((norm_pars(0) -   mu(0)*norm_pars(1)*norm_pars(1)) + sqrt((mu(0)*norm_pars(1)*norm_pars(1) - norm_pars(0))*(mu(0)*norm_pars(1)*norm_pars(1) - norm_pars(0)) + 4*y(t,0)*norm_pars(1)*norm_pars(1)));
+    double mu2 = (0.5)*((norm_pars(0) -   mu(1)*norm_pars(1)*norm_pars(1)) + sqrt((mu(1)*norm_pars(1)*norm_pars(1) - norm_pars(0))*(mu(1)*norm_pars(1)*norm_pars(1) - norm_pars(0)) + 4*y(t,1)*norm_pars(1)*norm_pars(1)));
+    double mu3 = (0.5)*((norm_pars(0) -   mu(2)*norm_pars(1)*norm_pars(1)) + sqrt((mu(2)*norm_pars(1)*norm_pars(1) - norm_pars(0))*(mu(2)*norm_pars(1)*norm_pars(1) - norm_pars(0)) + 4*y(t,2)*norm_pars(1)*norm_pars(1)));;
+    
+    
+    
+    double prop1 = sqrt(1/(y(t,0)/(mu1*mu1) + 1/(norm_pars(1)*norm_pars(1))));
+    double prop2 = sqrt(1/(y(t,1)/(mu2*mu2) + 1/(norm_pars(1)*norm_pars(1))));
+    double prop3 = sqrt(1/(y(t,2)/(mu3*mu3) + 1/(norm_pars(1)*norm_pars(1))));
+    
+    q(i,0,t) = r_truncnorm(mu1, prop1,0,1);
+    q(i,1,t) = r_truncnorm(mu2, prop2,0,1);
+    q(i,2,t) = r_truncnorm(mu3, prop3,0,1);
+    
+    // if(t==0){cout << mu(0) << endl;}
+    mat transup = transitions;
+    // update step
+    
+    transup(0,1) = (1-q(i,0,t))*transitions(0,1) + y(t,0)*q(i,0,t)*transitions(0,1)/(mu(0)*q(i,0,t));
+    transup(3,4) = (1-q(i,1,t))*transitions(3,4) + y(t,1)*q(i,1,t)*transitions(3,4)/(mu(1)*q(i,1,t));
+    transup(6,7) = (1-q(i,2,t))*transitions(6,7) + y(t,2)*q(i,2,t)*transitions(6,7)/(mu(2)*q(i,2,t));
+    
+    lambdabar.row(i) = sum(transup,0);
+    lambdabar(i,0) += 4*1025.7;
+    
+    double lambda_0 = std::max(mu(0) * q(i, 0, t), 1e-10);
+    double lambda_1 = std::max(mu(1) * q(i, 1, t), 1e-10);
+    double lambda_2 = std::max(mu(2) * q(i, 2, t), 1e-10);
+    q(i, 0, t) = std::max(q(i, 0, t), 1e-10);
+    q(i, 0, t) = std::min(q(i, 0, t), 1- 1e-10);
+    q(i, 1, t) = std::max(q(i, 1, t), 1e-10);
+    q(i, 1, t) = std::min(q(i, 1, t), 1- 1e-10);
+    q(i, 2, t) = std::max(q(i, 2, t), 1e-10);
+    q(i, 2, t) = std::min(q(i, 2, t), 1- 1e-10);
+    
+    lweights(i) = R::dpois(y(t,0), lambda_0 ,1) + R::dpois(y(t,1), lambda_1 ,1) + R::dpois( y(t,2),lambda_2 ,1)+ d_truncnorm(q(i,0,t),norm_pars(0),norm_pars(1),0,1,1) + d_truncnorm(q(i,1,t),norm_pars(0),norm_pars(1),0,1,1)+ d_truncnorm(q(i,2,t),norm_pars(0),norm_pars(1),0,1,1) - d_truncnorm(q(i,0,t),mu1,prop1,0,1,1)- d_truncnorm(q(i,1,t),mu2,prop2,0,1,1) - d_truncnorm(q(i,2,t),mu3,prop3,0,1,1);  
+  }
+  
+  
+}
+
+
+
+
+
+
 
 
 double computeLikelihood(vec& tWeights,
@@ -182,7 +282,7 @@ void resampleParticles(cube& q_parts,
   
   for(int i = 0; i < n_particles ; i++) {
     rParticles.row(i) = particles.row(indices(i));
-    rxi_parts(i,t) = xi_parts(indices(i),t);
+   // rxi_parts(i,t) = xi_parts(indices(i),t);
     for(int k=0; k < 3; k++){
       rq_parts(i,k,t) = q_parts(indices(i),k,t);
     }
@@ -191,46 +291,9 @@ void resampleParticles(cube& q_parts,
 
 
 
-void resampleParticlesvanilla(cube& q_parts,
-                              cube& rq_parts,
-                              mat& xi_parts,
-                              mat& rxi_parts,
-                              mat& rParticles,
-                              mat& particles,
-                              vec& weights,
-                              int t,
-                              int n_particles){
-  
-  // Rcpp::IntegerVector indices = Rcpp::sample(n_particles,n_particles, true, as<NumericVector>(wrap(weights)), false);
-  
-  double u = R::runif(0,1);
-  int j =0;
-  double cumsum_next = weights(0);
-  vec indices(n_particles);
-  
-  for(int n=0;n<n_particles; n++){
-    double Uin = (u + n)/n_particles;
-    while(Uin>cumsum_next){
-      j += 1;
-      cumsum_next+= weights(j);
-    }
-    indices(n) = j;
-  }
-  
-  
-  
-  for(int i = 0; i < n_particles ; i++) {
-    rParticles.row(i) = particles.row(indices(i));
-    rxi_parts(i,t) = xi_parts(indices(i),t);
-    for(int k=0; k < 3; k++){
-      rq_parts(i,k,t) = q_parts(indices(i),k,t);
-    }
-  }
-}
 
-
-// [[Rcpp::export(name=rotavirus_SMC_qropxi)]]
-List rotavirus_SMC_qropxi( arma::vec init_dist,
+// [[Rcpp::export(name=rotavirus_SMC_obs)]]
+List rotavirus_SMC_obs( arma::vec init_dist,
                            arma::mat y_obs,
                            int m, // here m should = 9 for SIRSIRSIR
                            arma::vec regular_params,
@@ -288,16 +351,10 @@ List rotavirus_SMC_qropxi( arma::vec init_dist,
   Rcpp::NumericVector ess(time_steps);
   // mat mu(3, n_particles);
   
-
+  
   
   for(int t = 0; t< time_steps; t++){
     ess(t) = 0;
-
-    propagate_particles(xi_particles, gamma_par, t, n_particles);
-    
-    
-    
-    
     compute_PAL(q_particles, norm_par, xi_particles, gammaprop, gamma_par, lambdabar_particles, prop, lambdabarresamp_particles, regular_params, K, log_weights, y_obs, m, t, n_particles, N);
     
     //if(t==0){cout << log_weights << endl;}
@@ -306,15 +363,30 @@ List rotavirus_SMC_qropxi( arma::vec init_dist,
     tWeights = log_weights - lWeightsMax;
     normaliseWeights(tWeights, nWeights);
     ess(t) = 1/(sum(pow( as<Rcpp::NumericVector>(wrap(nWeights)),2)));
+    
+    
+    if(ess(t)<10){
+      compute_PAL_prior(q_particles, norm_par, xi_particles, gammaprop, gamma_par, lambdabar_particles, prop, lambdabarresamp_particles, regular_params, K, log_weights, y_obs, m, t, n_particles, N);
+      
+      //if(t==0){cout << log_weights << endl;}
+      
+      lWeightsMax = max(log_weights);
+      tWeights = log_weights - lWeightsMax;
+      normaliseWeights(tWeights, nWeights);
+      ess(t) = 1/(sum(pow( as<Rcpp::NumericVector>(wrap(nWeights)),2)));
+      cout << nWeights << endl;
+      
+    }
+    
     double ll = computeLikelihood(tWeights, lWeightsMax, n_particles);
     log_lik += ll;
     
-    resampleParticlesvanilla(q_particles, qresamp_particles, xi_particles,xiresamp_particles, lambdabarresamp_particles, lambdabar_particles,nWeights,t,n_particles);
+    resampleParticles(q_particles, qresamp_particles, xi_particles,xiresamp_particles, lambdabarresamp_particles, lambdabar_particles,nWeights,t,n_particles);
     
   }
   
-  List L = List::create(Named("log_lik") = log_lik, Named("xi_particles") = xiresamp_particles, Named("q_particles") = qresamp_particles, Named("ess") = ess);
- // List L = List::create(Named("log_lik") = log_lik, Named("xi_particles") = xiresamp_particles, Named("q_particles") = qresamp_particles);
+  List L = List::create(Named("log_lik") = log_lik, Named("q_particles") = qresamp_particles, Named("ess") = ess);
+  // List L = List::create(Named("log_lik") = log_lik, Named("xi_particles") = xiresamp_particles, Named("q_particles") = qresamp_particles);
   
   return(L);
 }
