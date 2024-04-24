@@ -1,0 +1,74 @@
+---
+title: ''
+author: "Yize Hao"
+date: "2024-04-13"
+output: html_document
+---
+
+```{r}
+load("~/Study/STATS 489/PAL-check/rotavirus/results/Simulation_Study/Simulation+Comparison/OvOv/Filtering/condlik/pfilter_condlik_ovov.Rdata")
+load("~/Study/STATS 489/PAL-check/rotavirus/results/Simulation_Study/Simulation+Comparison/OvOv/Filtering/condlik/lik_list.Rdata")
+```
+
+```{r}
+x <- c()
+for(i in 1:36){
+  x[i] <- sum(list_cond_lik[[i]])
+}
+```
+
+```{r}
+time <- c(1:416)
+cond_loglik <- list_cond_lik[[1]]
+
+plot(time, cond_loglik, type = "l", col="blue", pch="o", lty=1)
+for(i in 2:36){
+  lines(time, list_cond_lik[[i]], col="blue",lty=1)
+}
+lines(time, lik_list$ll_storage, col="red",lty=1)
+# points(seq(from = 1, to = 416 ,by=10), rep(-150, times=42), col="black", pch="*")
+# lines(time, rep(-150, times=416), col="black", lty=1)
+legend("bottomright",               # position of the legend
+       legend = c("SMC", "PAL"),  # labels
+       col = c("blue", "red"),    # colors
+       pch = c(19,17), cex=0.5)   
+```
+
+```{r}
+sum_list <- list_cond_lik[[1]]
+for(i in 2:36){
+  sum_list <- sum_list + list_cond_lik[[i]]
+}
+
+problem <- sum_list/36
+which(problem < -50)
+```
+
+```{r}
+sum_list <- list_cond_lik[[1]]
+for(i in 2:36){
+  sum_list <- pmin(sum_list, list_cond_lik[[i]])
+}
+
+problem <- sum_list
+which(problem < -50)
+```
+
+
+#### Real rotavirus data outliers plot
+
+```{r}
+realdat <- data.frame(time=c(1:15), realdat[c(1:15), ])
+ggplot(data=realdat) + 
+  geom_line(aes(x=time, y=cases1),color='green') +
+  geom_line(aes(x=time, y=cases2), color='red') +
+  geom_line(aes(x=time, y=cases3), color='blue') +
+  ylab('Y_sim_pomp')+xlab('date')
+
+realdat <- data.frame(time=c(1:15), sim_keep_nonzero_125[[3]][c(1:15), ])
+ggplot(data=realdat) + 
+  geom_line(aes(x=time, y=cases1),color='green') +
+  geom_line(aes(x=time, y=cases2), color='red') +
+  geom_line(aes(x=time, y=cases3), color='blue') +
+  ylab('Y_sim_pomp')+xlab('date')
+```
